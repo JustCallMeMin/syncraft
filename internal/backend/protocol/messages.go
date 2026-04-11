@@ -16,6 +16,10 @@ const (
 	MessageTypeSubscribeAck     = "subscribe_ack"
 	MessageTypeSubmitOperation  = "submit_operation"
 	MessageTypeBroadcastOp      = "broadcast_operation"
+	MessageTypeRequestCatchup   = "request_catchup"
+	MessageTypeCatchupSnapshot  = "catchup_snapshot"
+	MessageTypeCatchupOps       = "catchup_operations"
+	MessageTypeCatchupComplete  = "catchup_complete"
 	MessageTypeError            = "error"
 	SubscriptionModeLiveOnly    = "live_only"
 	SubscriptionModeSnapshotGap = "snapshot_then_delta"
@@ -103,6 +107,47 @@ func (m SubscribeDocumentMessage) Validate() error {
 type SubscribeAckMessage struct {
 	Envelope
 	SubscriptionMode string `json:"subscription_mode"`
+}
+
+// RequestCatchupMessage asks the server for snapshot-plus-delta state transfer.
+type RequestCatchupMessage struct {
+	Envelope
+	KnownSnapshotID      *model.SnapshotID  `json:"known_snapshot_id,omitempty"`
+	KnownLastOperationID *model.OperationID `json:"known_last_operation_id,omitempty"`
+}
+
+// Validate validates the catch-up request envelope.
+func (m RequestCatchupMessage) Validate() error {
+	return m.Envelope.Validate(MessageTypeRequestCatchup, true)
+}
+
+// CatchupSnapshotMessage transfers one snapshot baseline.
+type CatchupSnapshotMessage struct {
+	Envelope
+	Snapshot CatchupSnapshotPayload `json:"snapshot"`
+}
+
+// CatchupSnapshotPayload carries derived snapshot state and replay watermark.
+type CatchupSnapshotPayload struct {
+	SnapshotID              model.SnapshotID `json:"snapshot_id"`
+	LastIncludedOperationID model.OperationID `json:"last_included_operation_id"`
+	State                   any               `json:"state"`
+}
+
+// CatchupOperationsMessage transfers one batch of later operations.
+type CatchupOperationsMessage struct {
+	Envelope
+	CatchupID              string            `json:"catchup_id"`
+	BatchIndex             int               `json:"batch_index"`
+	HasMore                bool              `json:"has_more"`
+	LastOperationIDInBatch model.OperationID `json:"last_operation_id_in_batch,omitempty"`
+	Operations             []model.Operation `json:"operations"`
+}
+
+// CatchupCompleteMessage confirms the end of one catch-up transfer.
+type CatchupCompleteMessage struct {
+	Envelope
+	LastOperationID model.OperationID `json:"last_operation_id,omitempty"`
 }
 
 // BroadcastOperationMessage delivers one accepted operation to subscribers.

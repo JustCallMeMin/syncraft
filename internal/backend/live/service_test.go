@@ -165,6 +165,109 @@ func TestHandleSubmitDuplicateDoesNotBroadcastTwice(t *testing.T) {
 	}
 }
 
+func TestHandleSubscribeReturnsSnapshotThenDeltaWhenClientIsBehind(t *testing.T) {
+	service := newService(t)
+	ctx := context.Background()
+
+	mustHello(t, ctx, service, "sess_1", "actor_a")
+	mustSubscribeAndExpectMode(t, ctx, service, "sess_1", "doc_1", protocol.SubscriptionModeLiveOnly)
+
+	msg := protocol.SubmitOperationMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeSubmitOperation,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_1",
+		},
+		Operation: insertOp("doc_1", "op_1", "actor_a", 1, "elem_1", "a"),
+	}
+	if _, errMsg, err := service.HandleSubmit(ctx, msg); err != nil || errMsg != nil {
+		t.Fatalf("HandleSubmit() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+
+	mustHello(t, ctx, service, "sess_2", "actor_b")
+	knownLast := model.OperationID("op_0")
+	ack, errMsg, err := service.HandleSubscribe(ctx, protocol.SubscribeDocumentMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeSubscribeDoc,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_2",
+			MessageID:       "msg_2",
+		},
+		KnownLastOperationID: &knownLast,
+	})
+	if err != nil || errMsg != nil {
+		t.Fatalf("HandleSubscribe() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+	if ack.SubscriptionMode != protocol.SubscriptionModeSnapshotGap {
+		t.Fatalf("SubscriptionMode = %s, want %s", ack.SubscriptionMode, protocol.SubscriptionModeSnapshotGap)
+	}
+}
+
+func TestHandleRequestCatchupReturnsSnapshotOperationsAndComplete(t *testing.T) {
+	service := newService(t)
+	ctx := context.Background()
+
+	mustHello(t, ctx, service, "sess_1", "actor_a")
+	mustSubscribeAndExpectMode(t, ctx, service, "sess_1", "doc_1", protocol.SubscriptionModeLiveOnly)
+
+	for i, op := range []model.Operation{
+		insertOp("doc_1", "op_1", "actor_a", 1, "elem_1", "a"),
+		insertOp("doc_1", "op_2", "actor_a", 2, "elem_2", "b"),
+	} {
+		msg := protocol.SubmitOperationMessage{
+			Envelope: protocol.Envelope{
+				ProtocolVersion: protocol.VersionV1,
+				MessageType:     protocol.MessageTypeSubmitOperation,
+				DocumentID:      "doc_1",
+				SessionID:       "sess_1",
+				MessageID:       "msg_submit",
+			},
+			Operation: op,
+		}
+		if _, errMsg, err := service.HandleSubmit(ctx, msg); err != nil || errMsg != nil {
+			t.Fatalf("submit %d err = %v, errMsg = %+v, want nil", i, err, errMsg)
+		}
+	}
+
+	mustHello(t, ctx, service, "sess_2", "actor_b")
+	oldWatermark := model.OperationID("op_0")
+	mustSubscribeAndExpectModeWithKnown(t, ctx, service, "sess_2", "doc_1", &oldWatermark, protocol.SubscriptionModeSnapshotGap)
+
+	events, errMsg, err := service.HandleRequestCatchup(ctx, protocol.RequestCatchupMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeRequestCatchup,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_2",
+			MessageID:       "msg_catchup",
+		},
+		KnownLastOperationID: &oldWatermark,
+	})
+	if err != nil || errMsg != nil {
+		t.Fatalf("HandleRequestCatchup() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+	if len(events) != 3 {
+		t.Fatalf("event count = %d, want 3", len(events))
+	}
+
+	if _, ok := events[0].(protocol.CatchupSnapshotMessage); !ok {
+		t.Fatalf("events[0] = %T, want CatchupSnapshotMessage", events[0])
+	}
+	ops, ok := events[1].(protocol.CatchupOperationsMessage)
+	if !ok {
+		t.Fatalf("events[1] = %T, want CatchupOperationsMessage", events[1])
+	}
+	if len(ops.Operations) != 2 {
+		t.Fatalf("operations count = %d, want 2", len(ops.Operations))
+	}
+	if _, ok := events[2].(protocol.CatchupCompleteMessage); !ok {
+		t.Fatalf("events[2] = %T, want CatchupCompleteMessage", events[2])
+	}
+}
+
 func newService(t *testing.T) *Service {
 	t.Helper()
 	store, err := persistence.NewFileStore(filepath.Join(t.TempDir(), "store"))
@@ -192,7 +295,17 @@ func mustHello(t *testing.T, ctx context.Context, service *Service, sessionID st
 
 func mustSubscribe(t *testing.T, ctx context.Context, service *Service, sessionID string, documentID model.DocumentID) {
 	t.Helper()
-	_, errMsg, err := service.HandleSubscribe(ctx, protocol.SubscribeDocumentMessage{
+	mustSubscribeAndExpectMode(t, ctx, service, sessionID, documentID, protocol.SubscriptionModeLiveOnly)
+}
+
+func mustSubscribeAndExpectMode(t *testing.T, ctx context.Context, service *Service, sessionID string, documentID model.DocumentID, mode string) {
+	t.Helper()
+	mustSubscribeAndExpectModeWithKnown(t, ctx, service, sessionID, documentID, nil, mode)
+}
+
+func mustSubscribeAndExpectModeWithKnown(t *testing.T, ctx context.Context, service *Service, sessionID string, documentID model.DocumentID, knownLast *model.OperationID, mode string) {
+	t.Helper()
+	ack, errMsg, err := service.HandleSubscribe(ctx, protocol.SubscribeDocumentMessage{
 		Envelope: protocol.Envelope{
 			ProtocolVersion: protocol.VersionV1,
 			MessageType:     protocol.MessageTypeSubscribeDoc,
@@ -200,9 +313,13 @@ func mustSubscribe(t *testing.T, ctx context.Context, service *Service, sessionI
 			SessionID:       sessionID,
 			MessageID:       "sub_" + sessionID,
 		},
+		KnownLastOperationID: knownLast,
 	})
 	if err != nil || errMsg != nil {
 		t.Fatalf("HandleSubscribe() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+	if ack == nil || ack.SubscriptionMode != mode {
+		t.Fatalf("SubscriptionMode = %+v, want %s", ack, mode)
 	}
 }
 

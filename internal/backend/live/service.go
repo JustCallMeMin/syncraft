@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/JustCallMeMin/syncraft/internal/backend/persistence"
 	"github.com/JustCallMeMin/syncraft/internal/backend/protocol"
@@ -76,6 +77,11 @@ func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDoc
 		return nil, nil, err
 	}
 
+	subscriptionMode, err := s.subscriptionModeLocked(ctx, msg.DocumentID, msg.KnownLastOperationID)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	ack := &protocol.SubscribeAckMessage{
 		Envelope: protocol.Envelope{
 			ProtocolVersion: protocol.VersionV1,
@@ -84,10 +90,91 @@ func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDoc
 			SessionID:       msg.SessionID,
 			MessageID:       msg.MessageID,
 		},
-		SubscriptionMode: protocol.SubscriptionModeLiveOnly,
+		SubscriptionMode: subscriptionMode,
 	}
 	session.outbox = append(session.outbox, *ack)
 	return ack, nil, nil
+}
+
+// HandleRequestCatchup serves snapshot-plus-delta state transfer for one subscribed session.
+func (s *Service) HandleRequestCatchup(ctx context.Context, msg protocol.RequestCatchupMessage) ([]any, *protocol.ErrorMessage, error) {
+	if err := msg.Validate(); err != nil {
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidDocumentID, err), nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session := s.sessions[msg.SessionID]
+	if session == nil {
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession), nil
+	}
+	if !session.subscriptions[msg.DocumentID] {
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, fmt.Errorf("session is not subscribed to document")), nil
+	}
+
+	snapshotRecord, laterOps, err := s.catchupStateLocked(ctx, msg.DocumentID, msg.KnownLastOperationID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	catchupID := fmt.Sprintf("catchup_%s_%d", msg.SessionID, time.Now().UTC().UnixNano())
+	out := make([]any, 0, 3)
+
+	snapshotMsg := protocol.CatchupSnapshotMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeCatchupSnapshot,
+			DocumentID:      msg.DocumentID,
+			SessionID:       "server",
+			MessageID:       msg.MessageID,
+		},
+		Snapshot: protocol.CatchupSnapshotPayload{
+			SnapshotID:              snapshotRecord.SnapshotID,
+			LastIncludedOperationID: snapshotRecord.LastIncludedOperationID,
+			State:                   snapshotRecord.State,
+		},
+	}
+	out = append(out, snapshotMsg)
+	session.outbox = append(session.outbox, snapshotMsg)
+
+	opsMsg := protocol.CatchupOperationsMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeCatchupOps,
+			DocumentID:      msg.DocumentID,
+			SessionID:       "server",
+			MessageID:       msg.MessageID,
+		},
+		CatchupID:  catchupID,
+		BatchIndex: 1,
+		HasMore:    false,
+		Operations: laterOps,
+	}
+	if len(laterOps) > 0 {
+		opsMsg.LastOperationIDInBatch = laterOps[len(laterOps)-1].OperationID
+	}
+	out = append(out, opsMsg)
+	session.outbox = append(session.outbox, opsMsg)
+
+	completeMsg := protocol.CatchupCompleteMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeCatchupComplete,
+			DocumentID:      msg.DocumentID,
+			SessionID:       "server",
+			MessageID:       msg.MessageID,
+		},
+	}
+	if len(laterOps) > 0 {
+		completeMsg.LastOperationID = laterOps[len(laterOps)-1].OperationID
+	} else {
+		completeMsg.LastOperationID = snapshotRecord.LastIncludedOperationID
+	}
+	out = append(out, completeMsg)
+	session.outbox = append(session.outbox, completeMsg)
+
+	return out, nil, nil
 }
 
 // HandleSubmit validates, persists, applies, and broadcasts one operation.
@@ -175,6 +262,60 @@ func (s *Service) documentLocked(ctx context.Context, documentID model.DocumentI
 	}
 	s.docs[documentID] = doc
 	return doc, nil
+}
+
+func (s *Service) subscriptionModeLocked(ctx context.Context, documentID model.DocumentID, knownLast *model.OperationID) (string, error) {
+	ops, err := s.store.LoadOperationsAfter(ctx, documentID, "")
+	if err != nil {
+		return "", err
+	}
+	if len(ops) == 0 {
+		return protocol.SubscriptionModeLiveOnly, nil
+	}
+	if knownLast != nil && *knownLast == ops[len(ops)-1].OperationID {
+		return protocol.SubscriptionModeLiveOnly, nil
+	}
+	return protocol.SubscriptionModeSnapshotGap, nil
+}
+
+func (s *Service) catchupStateLocked(ctx context.Context, documentID model.DocumentID, knownLast *model.OperationID) (persistence.SnapshotRecord, []model.Operation, error) {
+	snapshot, err := s.store.LoadLatestSnapshot(ctx, documentID)
+	if err != nil && !errors.Is(err, persistence.ErrSnapshotNotFound) {
+		return persistence.SnapshotRecord{}, nil, err
+	}
+
+	doc, err := s.documentLocked(ctx, documentID)
+	if err != nil {
+		return persistence.SnapshotRecord{}, nil, err
+	}
+
+	if snapshot == nil {
+		ops, err := s.store.LoadOperationsAfter(ctx, documentID, "")
+		if err != nil {
+			return persistence.SnapshotRecord{}, nil, err
+		}
+		var watermark model.OperationID
+		if len(ops) > 0 {
+			watermark = ops[len(ops)-1].OperationID
+		}
+		snapshot = &persistence.SnapshotRecord{
+			SnapshotID:              model.SnapshotID(fmt.Sprintf("snap_%d", time.Now().UTC().UnixNano())),
+			DocumentID:              documentID,
+			LastIncludedOperationID: watermark,
+			CreatedAt:               time.Now().UTC(),
+			State:                   doc.Snapshot(),
+		}
+	}
+
+	after := snapshot.LastIncludedOperationID
+	if knownLast != nil && *knownLast != "" && *knownLast != snapshot.LastIncludedOperationID {
+		after = *knownLast
+	}
+	laterOps, err := s.store.LoadOperationsAfter(ctx, documentID, after)
+	if err != nil {
+		return persistence.SnapshotRecord{}, nil, err
+	}
+	return *snapshot, laterOps, nil
 }
 
 func protocolError(envelope protocol.Envelope, code string, err error) *protocol.ErrorMessage {

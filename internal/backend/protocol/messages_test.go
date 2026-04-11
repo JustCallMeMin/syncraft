@@ -65,3 +65,19 @@ func TestSubmitOperationValidateRejectsDocumentMismatch(t *testing.T) {
 		t.Fatal("Validate() error = nil, want non-nil")
 	}
 }
+
+func TestRequestCatchupValidate(t *testing.T) {
+	msg := RequestCatchupMessage{
+		Envelope: Envelope{
+			ProtocolVersion: VersionV1,
+			MessageType:     MessageTypeRequestCatchup,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_1",
+		},
+	}
+
+	if err := msg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
