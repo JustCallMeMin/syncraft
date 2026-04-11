@@ -409,6 +409,8 @@ Clients that are behind must use snapshot plus delta.
 
 The client must not assume that reconnect means replay from scratch unless the server explicitly
 chooses to provide a fresh snapshot baseline.
+The client must treat the subscription as not yet current until `catchup_complete` is received for
+that reconnect transfer.
 
 ### Catch-Up Metadata Rules
 
