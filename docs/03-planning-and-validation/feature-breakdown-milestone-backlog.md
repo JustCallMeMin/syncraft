@@ -251,7 +251,7 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The highest-priority implementation tasks immediately after this document are:
 
-1. build the minimal browser-based plain-text editor surface
-2. apply local optimistic operations and remote operations through the browser client
-3. surface basic connection and error state for collaboration sessions
+1. expose a real browser shell over the client editor session layer
+2. connect submit and broadcast transport to the browser collaboration surface
+3. surface basic connection and error state in the browser UI
 4. validate restart recovery, reconnect, and delivery-irregularity flows against the demo script and release criteria

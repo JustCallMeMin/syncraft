@@ -138,6 +138,27 @@ func (r *Replica) ApplyBroadcastOperation(msg protocol.BroadcastOperationMessage
 	return nil
 }
 
+// ApplyLocalOperation applies one optimistic local operation before transport submission.
+func (r *Replica) ApplyLocalOperation(op model.Operation) error {
+	if r.doc == nil {
+		return ErrDocumentNotInitialized
+	}
+	if _, err := r.doc.Apply(op); err != nil {
+		return err
+	}
+	last := op.OperationID
+	r.lastOperationID = &last
+	return nil
+}
+
+// Snapshot exposes the current replica engine state for editor integration.
+func (r *Replica) Snapshot() (engine.Snapshot, error) {
+	if r.doc == nil {
+		return engine.Snapshot{}, ErrDocumentNotInitialized
+	}
+	return r.doc.Snapshot(), nil
+}
+
 // VisibleText returns the replica's visible plain-text state.
 func (r *Replica) VisibleText() string {
 	if r.doc == nil {
