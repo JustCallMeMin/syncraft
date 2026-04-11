@@ -1,6 +1,7 @@
 const form = document.getElementById("connect-form");
 const actorInput = document.getElementById("actor-id");
 const documentInput = document.getElementById("document-id");
+const reconnectButton = document.getElementById("reconnect-button");
 const editor = document.getElementById("editor");
 const statusNode = document.getElementById("status");
 const errorNode = document.getElementById("error");
@@ -8,12 +9,26 @@ const errorNode = document.getElementById("error");
 let socket = null;
 let applyingRemoteState = false;
 let lastText = "";
+let reconnectTimer = null;
+let sessionIntent = null;
 
 actorInput.value = actorInput.value || `actor-${Math.random().toString(36).slice(2, 8)}`;
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  connect();
+  connect({
+    actorID: actorInput.value.trim(),
+    documentID: documentInput.value.trim(),
+    retry: true,
+  });
+});
+
+reconnectButton.addEventListener("click", () => {
+  if (!sessionIntent) {
+    setStatus("error", "connect once before trying to reconnect");
+    return;
+  }
+  connect(sessionIntent);
 });
 
 editor.addEventListener("input", () => {
@@ -45,7 +60,10 @@ editor.addEventListener("input", () => {
   }
 });
 
-function connect() {
+function connect(intent) {
+  sessionIntent = intent;
+  window.clearTimeout(reconnectTimer);
+
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.close();
   }
@@ -54,12 +72,13 @@ function connect() {
   socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
   setStatus("connecting", "");
   editor.disabled = true;
+  reconnectButton.disabled = true;
 
   socket.addEventListener("open", () => {
     socket.send(JSON.stringify({
       type: "init",
-      actor_id: actorInput.value.trim(),
-      document_id: documentInput.value.trim(),
+      actor_id: intent.actorID,
+      document_id: intent.documentID,
     }));
   });
 
@@ -74,16 +93,22 @@ function connect() {
     applyingRemoteState = false;
     setStatus(message.connection_state || "live", message.last_error || "");
     editor.disabled = message.connection_state === "error" || message.connection_state === "connecting";
+    reconnectButton.disabled = false;
   });
 
   socket.addEventListener("close", () => {
     setStatus("disconnected", "");
     editor.disabled = true;
+    reconnectButton.disabled = false;
+    if (intent.retry) {
+      reconnectTimer = window.setTimeout(() => connect(intent), 750);
+    }
   });
 
   socket.addEventListener("error", () => {
     setStatus("error", "websocket connection failed");
     editor.disabled = true;
+    reconnectButton.disabled = false;
   });
 }
 

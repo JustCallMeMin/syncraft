@@ -28,6 +28,12 @@ go run ./cmd/demo-server
 Then open two browser tabs against `http://localhost:8080`, join the same
 `document_id`, and execute the journeys below.
 
+The shell now includes:
+
+- a reconnect button for manual recovery during demos
+- automatic reconnect retry after websocket drops
+- visible status and error reporting for operator-facing troubleshooting
+
 ## Primary Audience
 
 - reviewers evaluating technical credibility
@@ -131,6 +137,8 @@ manual repair.
 
 - narrate the reconnect steps in plain language
 - avoid deep protocol detail unless the audience is technical
+- in the current repo shell, you can demonstrate reconnect either by waiting for
+  the browser to retry or by pressing the reconnect button explicitly
 
 ## Journey 4: Delivery Irregularities Do Not Corrupt State
 
@@ -187,6 +195,8 @@ Work survives backend restart and rebuild.
 ### Demo Notes
 
 - explicitly state that recovery comes from persisted state, not hidden client caching
+- for the current repo demo, restart the Go server process and reconnect through
+  the browser shell against the same persistence directory
 
 ## Recommended Demo Order
 
