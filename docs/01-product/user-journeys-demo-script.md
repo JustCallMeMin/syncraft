@@ -17,6 +17,17 @@ right problem: correct and recoverable real-time plain-text collaboration.
 - Prefer observable recovery and convergence behavior over UI ornament.
 - Avoid adding flows that imply rich-text, workflow, or enterprise scope.
 
+## Repo Demo Entry Point
+
+For the current in-repo browser demo shell, run:
+
+```bash
+go run ./cmd/demo-server
+```
+
+Then open two browser tabs against `http://localhost:8080`, join the same
+`document_id`, and execute the journeys below.
+
 ## Primary Audience
 
 - reviewers evaluating technical credibility
@@ -60,6 +71,8 @@ Two collaborators want to edit the same shared plain-text document at the same t
 
 - use a sentence short enough that the audience can track the change visually
 - call out that correctness does not depend on one client being authoritative
+- the current repo shell is intentionally minimal and uses the existing editor session
+  layer rather than a polished standalone frontend stack
 
 ## Journey 2: Concurrent Insert At The Same Logical Position
 

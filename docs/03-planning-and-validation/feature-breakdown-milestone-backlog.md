@@ -251,7 +251,7 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The highest-priority implementation tasks immediately after this document are:
 
-1. expose a real browser shell over the client editor session layer
-2. connect submit and broadcast transport to the browser collaboration surface
-3. surface basic connection and error state in the browser UI
-4. validate restart recovery, reconnect, and delivery-irregularity flows against the demo script and release criteria
+1. validate the browser collaboration shell against reconnect, restart recovery, and delivery-irregularity demo paths
+2. harden the browser shell around session reset, reconnect, and operator-visible error handling
+3. align product and demo docs with the shipped browser collaboration path
+4. close remaining release criteria evidence for the end-to-end v1 demo
