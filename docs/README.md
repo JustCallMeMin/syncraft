@@ -58,3 +58,5 @@ the working mirror used for:
 - Keep one concept in one canonical file whenever possible.
 - Add links forward and backward so readers can move through product, canonical spec,
   planning, and validation layers without search.
+- Use `python scripts/notion_sync_docs.py check` to validate the Notion mirror map
+  and `python scripts/notion_sync_docs.py sync` to refresh mapped local docs.

@@ -40,3 +40,21 @@ creating a new note.
 Notion remains the primary shared memory and approval surface.
 When a local canonical doc changes meaningfully, update the matching Notion record
 in the same work session.
+
+## Local Sync Command
+
+Use the local sync script when you need to refresh the repository mirror from
+Notion.
+
+```bash
+python scripts/notion_sync_docs.py check
+python scripts/notion_sync_docs.py sync
+```
+
+Rules:
+
+- `NOTION_TOKEN` must be set before `sync`.
+- The mapping source is `docs/notion-sync-map.json`.
+- Prefer `check` first when editing the sync map.
+- Use `--only <output-path>` to refresh one mirrored page without touching the
+  rest of `docs/`.

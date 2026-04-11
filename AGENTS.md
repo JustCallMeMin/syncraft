@@ -288,6 +288,13 @@ The current canonical local files are:
 
 Agents must prefer updating these canonical local docs instead of creating ad hoc flat notes in `docs/`.
 
+The local Notion mirror workflow is:
+
+- validate mappings with `python scripts/notion_sync_docs.py check`
+- refresh mapped docs with `python scripts/notion_sync_docs.py sync`
+- maintain `docs/notion-sync-map.json` when adding or moving mirrored canonical files
+- avoid editing generated mirror files and the Notion source in contradictory ways during the same task
+
 When code changes modify architecture, protocol semantics, or operational assumptions, agents must:
 
 - update the relevant local docs in `docs/`

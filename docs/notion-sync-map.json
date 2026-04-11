@@ -1,0 +1,87 @@
+[
+  {
+    "title": "Syncraft PRD / Business Spec",
+    "notion_url": "https://www.notion.so/33ce98673be48141be6be361c7ba1034",
+    "output_path": "docs/01-product/prd-business-spec.md"
+  },
+  {
+    "title": "Syncraft MVP Scope / Release Criteria",
+    "notion_url": "https://www.notion.so/33ce98673be48143a9a0d90940bddb4c",
+    "output_path": "docs/01-product/mvp-scope-release-criteria.md"
+  },
+  {
+    "title": "Syncraft User Journeys / Demo Script",
+    "notion_url": "https://www.notion.so/33ce98673be481198281ce68d1130580",
+    "output_path": "docs/01-product/user-journeys-demo-script.md"
+  },
+  {
+    "title": "Syncraft V1 NFR Baseline",
+    "notion_url": "https://www.notion.so/33fe98673be481e8a720d4f557cc243c",
+    "output_path": "docs/01-product/v1-nfr-baseline.md"
+  },
+  {
+    "title": "Syncraft Canonical Architecture",
+    "notion_url": "https://www.notion.so/33de98673be4813ca60beca82fcb8742",
+    "output_path": "docs/02-canonical/canonical-architecture.md"
+  },
+  {
+    "title": "Syncraft Canonical Domain Model",
+    "notion_url": "https://www.notion.so/33ee98673be48148a642d663db7b8260",
+    "output_path": "docs/02-canonical/canonical-domain-model.md"
+  },
+  {
+    "title": "Syncraft Protocol Spec",
+    "notion_url": "https://www.notion.so/33ce98673be48146ba55f1f938a9b635",
+    "output_path": "docs/02-canonical/protocol-spec.md"
+  },
+  {
+    "title": "Syncraft Canonical Invariants",
+    "notion_url": "https://www.notion.so/33de98673be481508444db2143e44c02",
+    "output_path": "docs/02-canonical/canonical-invariants.md"
+  },
+  {
+    "title": "Syncraft Canonical Constraints and Non-Goals",
+    "notion_url": "https://www.notion.so/33de98673be481beb7cdc743a9d6e77c",
+    "output_path": "docs/02-canonical/canonical-constraints-and-non-goals.md"
+  },
+  {
+    "title": "Syncraft Domain Glossary",
+    "notion_url": "https://www.notion.so/33ce98673be481559d46e77a68407d35",
+    "output_path": "docs/02-canonical/domain-glossary.md"
+  },
+  {
+    "title": "Syncraft Feature Breakdown / Milestone Backlog",
+    "notion_url": "https://www.notion.so/33ce98673be48120b51bcb1f0c5b9a11",
+    "output_path": "docs/03-planning-and-validation/feature-breakdown-milestone-backlog.md"
+  },
+  {
+    "title": "Use Case: Collaborative Edit",
+    "notion_url": "https://www.notion.so/33ce98673be481419901cde62b9221b8",
+    "output_path": "docs/03-planning-and-validation/use-cases/collaborative-edit.md"
+  },
+  {
+    "title": "Use Case: Concurrent Insert",
+    "notion_url": "https://www.notion.so/33ce98673be481f7aa99c3aa55f1173c",
+    "output_path": "docs/03-planning-and-validation/use-cases/concurrent-insert.md"
+  },
+  {
+    "title": "Use Case: Reconnect",
+    "notion_url": "https://www.notion.so/33ce98673be481c1950bd5dd0495057f",
+    "output_path": "docs/03-planning-and-validation/use-cases/reconnect.md"
+  },
+  {
+    "title": "Use Case: Recovery",
+    "notion_url": "https://www.notion.so/33ce98673be4810ea0c0d4946f823bdd",
+    "output_path": "docs/03-planning-and-validation/use-cases/recovery-restart.md"
+  },
+  {
+    "title": "Use Case: Delivery Irregularities",
+    "notion_url": "https://www.notion.so/33ce98673be481fa9e51e67cfda44aab",
+    "output_path": "docs/03-planning-and-validation/use-cases/delivery-irregularities.md"
+  },
+  {
+    "title": "Use Case: Offline Queueing",
+    "notion_url": "https://www.notion.so/33ce98673be48166837fe59ee3f91251",
+    "output_path": "docs/03-planning-and-validation/use-cases/offline-queueing.md"
+  }
+]
