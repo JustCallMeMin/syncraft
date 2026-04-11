@@ -251,7 +251,7 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The highest-priority implementation tasks immediately after this document are:
 
-1. complete `Define CRDT element and operation model`
-2. implement one-rune insert semantics and deferred unknown-delete handling
-3. implement deterministic insert and delete apply logic
-4. build the invariant-focused test harness before websocket integration expands
+1. build the invariant-focused test harness for permutation, duplicate-delivery, and recovery validation
+2. extend reconnect validation so a resumed replica is compared against a continuously connected peer
+3. build the minimal browser-based plain-text editor surface
+4. validate restart recovery and reconnect flows against the demo script and release criteria
