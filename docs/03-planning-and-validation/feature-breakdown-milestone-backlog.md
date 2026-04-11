@@ -1,0 +1,257 @@
+# Syncraft Feature Breakdown / Milestone Backlog
+
+## Purpose
+
+This document translates the PRD, MVP scope, and protocol specification into an execution
+backlog organized by milestone. It is intended to make implementation sequencing explicit
+and to reduce ambiguity in task ownership and dependency order.
+
+## Planning Principles
+
+- correctness before UI breadth
+- protocol and data model before transport polish
+- persistence before recovery claims
+- invariant-driven testing before demo confidence
+- narrow milestones with explicit exit criteria
+
+## Milestone 1: Core Model Freeze
+
+### Goal
+
+Lock the CRDT data model and operation semantics so the rest of the system can build on a
+stable contract.
+
+### Tasks
+
+- `@agent-core-engine`: Define CRDT element and operation model
+- `@agent-core-engine`: Implement one-rune insert semantics in the CRDT model
+- `@agent-core-engine`: Implement deterministic deferred handling for unknown delete targets
+- `@agent-reviewer-security`: Review operation schema and validation boundaries
+
+### Dependencies
+
+- ADR-003 accepted
+- Syncraft Protocol Spec approved for v1 use
+
+### Exit Criteria
+
+- operation identifiers and element identifiers are fixed
+- insert and delete payload semantics are unambiguous
+- tie-breaking behavior is documented
+- open protocol questions affecting implementation are resolved
+
+## Milestone 2: Engine Apply Logic
+
+### Goal
+
+Build the in-memory CRDT engine that can apply insert and delete operations deterministically.
+
+### Tasks
+
+- `@agent-core-engine`: Implement deterministic insert apply logic
+- `@agent-core-engine`: Implement deterministic delete apply logic
+- `@agent-core-engine`: Implement visible text projection
+- `@agent-core-engine`: Implement operation deduplication behavior
+
+### Dependencies
+
+- Milestone 1 complete
+
+### Exit Criteria
+
+- single-replica apply behavior is correct
+- duplicate operations are harmless
+- internal ordering is deterministic
+
+## Milestone 3: Correctness Test Harness
+
+### Goal
+
+Prove convergence and replay invariants before broader integration.
+
+### Tasks
+
+- `@agent-qa`: Build invariant-focused test harness
+- `@agent-qa`: Add permutation tests for delivery reordering
+- `@agent-qa`: Add duplicate delivery tests
+- `@agent-core-engine`: Add replay determinism tests
+- `@agent-reviewer-security`: Review error reporting and validation behavior
+
+### Dependencies
+
+- Milestone 2 complete
+
+### Exit Criteria
+
+- convergence holds across tested operation order permutations
+- replay from different delivery orders converges to the same visible state
+- duplicate delivery does not alter final state
+
+## Milestone 4: Persistence Layer
+
+### Goal
+
+Persist operations and snapshots so Syncraft can recover from restart and support catch-up.
+
+### Tasks
+
+- `@agent-backend`: Design PostgreSQL schema for operation log and snapshots
+- `@agent-backend`: Implement append-only operation persistence
+- `@agent-backend`: Implement snapshot creation and load flow
+- `@agent-backend`: Add rebuild-from-persistence path
+
+### Dependencies
+
+- Milestone 1 complete
+- Milestone 2 behavior stable enough for serialization
+
+### Exit Criteria
+
+- accepted operations are persisted durably
+- snapshots preserve sufficient CRDT state
+- rebuild from persistence matches expected document state
+
+## Milestone 5: Protocol And Transport Integration
+
+### Goal
+
+Implement the v1 websocket protocol and live operation flow defined in the protocol spec.
+
+### Tasks
+
+- `@agent-backend`: Implement `client_hello` and document subscription handling
+- `@agent-backend`: Implement `submit_operation` validation and persistence pipeline
+- `@agent-backend`: Implement `broadcast_operation` fanout
+- `@agent-backend`: Implement protocol error responses
+- `@agent-reviewer-security`: Review websocket validation and least-privilege boundaries
+
+### Dependencies
+
+- Milestone 2 complete
+- Milestone 4 complete
+
+### Exit Criteria
+
+- clients can subscribe and exchange operations through the defined protocol
+- malformed messages are rejected cleanly
+- logs trace protocol flow end to end
+
+## Milestone 6: Reconnect And Catch-Up
+
+### Goal
+
+Implement snapshot-plus-delta recovery and prove reconnect correctness.
+
+### Tasks
+
+- `@agent-backend`: Implement catch-up decision logic
+- `@agent-backend`: Implement snapshot metadata response
+- `@agent-backend`: Implement delta operation replay after snapshot watermark
+- `@agent-client`: Implement reconnect bootstrap flow
+- `@agent-client`: Resubscribe and continue live stream after catch-up
+
+### Dependencies
+
+- Milestone 4 complete
+- Milestone 5 complete
+
+### Exit Criteria
+
+- reconnect restores the same visible state as a continuously connected replica
+- catch-up does not require manual intervention
+- replay watermark semantics behave as documented
+
+## Milestone 7: Client Collaboration Surface
+
+### Goal
+
+Expose the engine and protocol through a minimal browser-based plain-text editor.
+
+### Tasks
+
+- `@agent-client`: Build minimal editor integration
+- `@agent-client`: Apply local optimistic operations
+- `@agent-client`: Apply remote operations safely
+- `@agent-client`: Surface basic connection and error state
+
+### Dependencies
+
+- Milestone 5 complete
+- reconnect flow sufficiently stable from Milestone 6
+
+### Exit Criteria
+
+- two users can edit the same document in a browser
+- UI is minimal but reliable
+- product demo no longer depends on internal tooling only
+
+## Milestone 8: Demo And Release Hardening
+
+### Goal
+
+Turn the implementation into a repeatable v1 demo that satisfies MVP release criteria.
+
+### Tasks
+
+- `@agent-qa`: Run the agreed demo script end to end
+- `@agent-qa`: Validate restart recovery scenario
+- `@agent-qa`: Validate reconnect and delivery-irregularity scenarios
+- `@agent-product-docs`: Ensure PRD, MVP scope, protocol spec, and demo docs are aligned
+- `@agent-reviewer-security`: Final review of validation, logging, and persistence boundaries
+
+### Dependencies
+
+- Milestones 1 through 7 complete
+
+### Exit Criteria
+
+- demo pass conditions are satisfied
+- release blockers are cleared
+- docs and implementation tell the same story
+
+## Backlog Summary By Area
+
+### Core Engine
+
+- data model freeze
+- deterministic insert and delete apply
+- visible text projection
+- replay and dedup semantics
+
+### Backend
+
+- operation persistence
+- snapshot creation and load
+- websocket protocol handling
+- catch-up and reconnect support
+
+### Client
+
+- minimal editor surface
+- optimistic local apply
+- remote apply
+- reconnect bootstrap and resubscription
+
+### Testing
+
+- invariant tests
+- permutation tests
+- duplicate delivery tests
+- reconnect and restart recovery tests
+
+### Docs
+
+- PRD
+- user journeys and demo script
+- MVP scope and release criteria
+- protocol spec
+- milestone backlog
+
+## Immediate Next Tasks
+
+The highest-priority implementation tasks immediately after this document are:
+
+1. complete `Define CRDT element and operation model`
+2. implement one-rune insert semantics and deferred unknown-delete handling
+3. implement deterministic insert and delete apply logic
+4. build the invariant-focused test harness before websocket integration expands
