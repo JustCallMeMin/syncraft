@@ -6,6 +6,8 @@ Use this folder for execution sequencing and proof-oriented documents.
   Milestone-level delivery breakdown.
 - [`use-case-catalog.md`](./use-case-catalog.md)
   Entry point for implementation-facing use cases.
+- [`v1-demo-release-evidence.md`](./v1-demo-release-evidence.md)
+  Release-evidence landing page for the shipped browser demo path.
 - [`use-cases/`](./use-cases/)
   Individual use case specs used by engineering and QA.
 

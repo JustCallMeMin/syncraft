@@ -17,6 +17,23 @@ right problem: correct and recoverable real-time plain-text collaboration.
 - Prefer observable recovery and convergence behavior over UI ornament.
 - Avoid adding flows that imply rich-text, workflow, or enterprise scope.
 
+## Repo Demo Entry Point
+
+For the current in-repo browser demo shell, run:
+
+```bash
+go run ./cmd/demo-server
+```
+
+Then open two browser tabs against `http://localhost:8080`, join the same
+`document_id`, and execute the journeys below.
+
+The shell now includes:
+
+- a reconnect button for manual recovery during demos
+- automatic reconnect retry after websocket drops
+- visible status and error reporting for operator-facing troubleshooting
+
 ## Primary Audience
 
 - reviewers evaluating technical credibility
@@ -60,6 +77,8 @@ Two collaborators want to edit the same shared plain-text document at the same t
 
 - use a sentence short enough that the audience can track the change visually
 - call out that correctness does not depend on one client being authoritative
+- the current repo shell is intentionally minimal and uses the existing editor session
+  layer rather than a polished standalone frontend stack
 
 ## Journey 2: Concurrent Insert At The Same Logical Position
 
@@ -118,6 +137,8 @@ manual repair.
 
 - narrate the reconnect steps in plain language
 - avoid deep protocol detail unless the audience is technical
+- in the current repo shell, you can demonstrate reconnect either by waiting for
+  the browser to retry or by pressing the reconnect button explicitly
 
 ## Journey 4: Delivery Irregularities Do Not Corrupt State
 
@@ -174,6 +195,8 @@ Work survives backend restart and rebuild.
 ### Demo Notes
 
 - explicitly state that recovery comes from persisted state, not hidden client caching
+- for the current repo demo, restart the Go server process and reconnect through
+  the browser shell against the same persistence directory
 
 ## Recommended Demo Order
 

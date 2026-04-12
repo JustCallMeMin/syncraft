@@ -42,3 +42,10 @@ The following remain primarily in Notion today and should be consulted there:
 
 If one of these becomes frequently needed in local review workflows, promote a local
 mirror or summary page here rather than keeping the repo silent about it.
+
+## Local Execution Mirrors
+
+The following operational layer has been materialized locally for workspace use:
+
+- [`agent-role-manifest.md`](./agent-role-manifest.md)
+- [`../../.agent/agent-manifest.md`](../../.agent/agent-manifest.md)

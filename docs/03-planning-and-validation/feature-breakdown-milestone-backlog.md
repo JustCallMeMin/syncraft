@@ -249,9 +249,5 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 ## Immediate Next Tasks
 
-The highest-priority implementation tasks immediately after this document are:
-
-1. complete `Define CRDT element and operation model`
-2. implement one-rune insert semantics and deferred unknown-delete handling
-3. implement deterministic insert and delete apply logic
-4. build the invariant-focused test harness before websocket integration expands
+No remaining pre-release blockers are open in the current local Milestone 8 path.
+Further work should start from release integration or a newly approved post-v1 task set.

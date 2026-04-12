@@ -32,6 +32,9 @@ The following capabilities are required for Syncraft v1:
 - recover correctly after backend restart
 - expose enough observability to diagnose failures in development and demo environments
 
+The current repo delivery path for these capabilities is the minimal browser demo shell
+served by `go run ./cmd/demo-server`.
+
 ## In-Scope Technical Foundations
 
 The following foundations are required because the product claims depend on them:
@@ -115,6 +118,17 @@ met:
 - broader observability dashboards
 - performance improvements beyond baseline acceptable operation
 
+## Current Implementation Note
+
+The shipped browser surface is intentionally narrow:
+
+- one shared plain-text editor view
+- visible connection and error state
+- reconnect and restart recovery through the same demo path
+
+This is sufficient for v1 release evidence if the correctness and recovery gates are met.
+It should not be described as a broad end-user editing product yet.
+
 ## Release Blockers
 
 The MVP must not be declared complete if any of the following remain true:
@@ -136,18 +150,25 @@ Syncraft v1 is done when:
 - the team can execute the agreed demo script end to end
 - the result still respects the narrow v1 scope described in the PRD
 
+The current checklist evidence for these claims is consolidated in
+[`../03-planning-and-validation/v1-demo-release-evidence.md`](../03-planning-and-validation/v1-demo-release-evidence.md).
+
 ## Exit Checklist
 
-- [ ] Shared plain-text editing works with at least two clients
-- [ ] Concurrent edits converge consistently
-- [ ] Reconnect flow is verified
-- [ ] Restart recovery is verified
-- [ ] Persistence behavior is verified
-- [ ] Duplicate delivery tests pass
-- [ ] Out-of-order delivery tests pass
-- [ ] Demo script is repeatable
-- [ ] Scope has not expanded beyond v1 commitments
-- [ ] Product and technical docs are aligned
+- [x] Shared plain-text editing works with at least two clients
+- [x] Concurrent edits converge consistently
+- [x] Reconnect flow is verified
+- [x] Restart recovery is verified
+- [x] Persistence behavior is verified
+- [x] Duplicate delivery tests pass
+- [x] Out-of-order delivery tests pass
+- [x] Demo script is repeatable
+- [x] Scope has not expanded beyond v1 commitments
+- [x] Product and technical docs are aligned
+
+These checklist items are satisfied by the current repo state as of 2026-04-12. Final overall
+demo-readiness sign-off is supported by the current local release evidence, including the
+practical v1 performance baseline documented in `v1-nfr-baseline.md`.
 
 ## Deferred Post-v1 Candidates
 
