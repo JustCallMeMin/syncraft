@@ -1,8 +1,11 @@
 package persistence
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,6 +104,42 @@ func TestRebuildDocumentFromSnapshotPlusLaterOperations(t *testing.T) {
 	}
 	if got := rebuilt.VisibleText(); got != doc.VisibleText() {
 		t.Fatalf("VisibleText() = %q, want %q", got, doc.VisibleText())
+	}
+}
+
+func TestPersistenceLogsAppendAndSnapshotMutations(t *testing.T) {
+	var logBuffer bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
+	store := newTestStore(t)
+	store.SetLogger(logger)
+	ctx := context.Background()
+
+	op := insertOp("doc_1", "op_1", "actor_a", 1, "elem_1", "a", nil, nil)
+	mustAppend(t, store, ctx, op)
+
+	doc := newEngineDoc(t, "doc_1")
+	if _, err := doc.Apply(op); err != nil {
+		t.Fatalf("Apply() error = %v, want nil", err)
+	}
+	if err := store.SaveSnapshot(ctx, SnapshotRecord{
+		SnapshotID:              "snap_1",
+		DocumentID:              "doc_1",
+		LastIncludedOperationID: "op_1",
+		CreatedAt:               time.Now().UTC(),
+		State:                   doc.Snapshot(),
+	}); err != nil {
+		t.Fatalf("SaveSnapshot() error = %v, want nil", err)
+	}
+
+	logOutput := logBuffer.String()
+	if !strings.Contains(logOutput, "append operation") {
+		t.Fatalf("log output = %q, want append operation entry", logOutput)
+	}
+	if !strings.Contains(logOutput, "save snapshot") {
+		t.Fatalf("log output = %q, want save snapshot entry", logOutput)
+	}
+	if strings.Contains(logOutput, "operation_value") {
+		t.Fatalf("log output = %q, want no raw text payload values", logOutput)
 	}
 }
 

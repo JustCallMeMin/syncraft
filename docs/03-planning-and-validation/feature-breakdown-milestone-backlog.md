@@ -249,9 +249,5 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 ## Immediate Next Tasks
 
-The highest-priority implementation tasks immediately after this document are:
-
-1. validate the browser collaboration shell against reconnect, restart recovery, and delivery-irregularity demo paths
-2. harden the browser shell around session reset, reconnect, and operator-visible error handling
-3. align product and demo docs with the shipped browser collaboration path
-4. close remaining release criteria evidence for the end-to-end v1 demo
+No remaining pre-release blockers are open in the current local Milestone 8 path.
+Further work should start from release integration or a newly approved post-v1 task set.

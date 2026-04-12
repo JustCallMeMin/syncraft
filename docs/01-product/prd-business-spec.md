@@ -183,4 +183,3 @@ form. The immediate value is not broad office productivity. The immediate value 
 
 - Which initial demo scenario best communicates value to non-technical reviewers?
 - How much observability should be exposed in the product UI versus only in logs and test tooling?
-- What document size and session count should define the practical v1 performance target?

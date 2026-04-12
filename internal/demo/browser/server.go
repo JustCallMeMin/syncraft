@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,9 +80,6 @@ func NewServer(persistenceRoot string) (*Server, error) {
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
-			CheckOrigin: func(_ *http.Request) bool {
-				return true
-			},
 		},
 		clients: make(map[*websocket.Conn]*browserClient),
 		docs:    make(map[model.DocumentID]map[*websocket.Conn]bool),
@@ -89,6 +88,7 @@ func NewServer(persistenceRoot string) (*Server, error) {
 
 // Handler returns the HTTP handler that serves the browser shell and websocket endpoint.
 func (s *Server) Handler() (http.Handler, error) {
+	s.upgrader.CheckOrigin = s.checkOrigin
 	subtree, err := fs.Sub(webAssets, "web")
 	if err != nil {
 		return nil, fmt.Errorf("prepare embedded web assets: %w", err)
@@ -97,6 +97,18 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("/", http.FileServerFS(subtree))
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	return mux, nil
+}
+
+func (s *Server) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(originURL.Host, r.Host)
 }
 
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {

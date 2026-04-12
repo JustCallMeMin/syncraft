@@ -28,13 +28,16 @@ operational baseline so validation runs are meaningful.
 
 - target: initial open or catch-up should feel near-immediate in local development
   and demo conditions
-- practical threshold: normally within a few seconds at v1 target scale
+- practical threshold: bootstrap from snapshot plus delta should normally complete
+  within `5s` at the v1 target scale of one shared document in the low tens of
+  kilobytes
 
 ### Reconnect Latency
 
 - target: reconnect and catch-up should restore a correct visible document state
   quickly enough for live demos
-- practical threshold: normally within a few seconds at v1 target scale
+- practical threshold: reconnect catch-up should normally complete within `5s`
+  at the same v1 target scale
 
 ### Durability Expectation
 
@@ -55,6 +58,22 @@ A v1 demo is operationally acceptable only if:
 - reconnect completes without manual repair
 - restart recovery reproduces the same logical state from persistence
 - no known correctness blocker remains open for the demo path
+
+## Current Local Evidence
+
+The current repo evidence for this baseline is:
+
+- `internal/qa/performance/performance_test.go`:
+  `TestV1TargetScaleBootstrapAndReconnect`
+- target scale under test:
+  - one plain-text document of `12 KiB`
+  - snapshot baseline at `8 KiB`
+  - reconnect delta tail for the remaining document history
+- pass rule:
+  - rebuild from persistence completes within `5s`
+  - reconnect catch-up completes within `5s`
+
+This is a practical v1 local-demo baseline, not a production SLO.
 
 ## Explicit Non-Claims
 
