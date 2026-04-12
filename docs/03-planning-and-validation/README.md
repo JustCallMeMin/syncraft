@@ -8,6 +8,8 @@ Use this folder for execution sequencing and proof-oriented documents.
   Entry point for implementation-facing use cases.
 - [`v1-demo-release-evidence.md`](./v1-demo-release-evidence.md)
   Release-evidence landing page for the shipped browser demo path.
+- [`post-v1-offline-queueing-reentry-rule.md`](./post-v1-offline-queueing-reentry-rule.md)
+  Planning gate that must be satisfied before offline queueing leaves deferred status.
 - [`use-cases/`](./use-cases/)
   Individual use case specs used by engineering and QA.
 

@@ -23,6 +23,7 @@ and validate Syncraft behavior.
 ## Deferred Or Out-Of-Scope Use Cases
 
 - [`use-cases/offline-queueing.md`](./use-cases/offline-queueing.md)
+  Re-entry is governed by [`post-v1-offline-queueing-reentry-rule.md`](./post-v1-offline-queueing-reentry-rule.md).
 
 ## Decision Anchors
 

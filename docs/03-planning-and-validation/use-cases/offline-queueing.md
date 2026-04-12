@@ -36,6 +36,8 @@ A disconnected client continues editing locally and later attempts to synchroniz
 
 - no canonical v1 behavior is promised here yet
 - future implementation requires explicit promotion into product and technical specs
+- any post-v1 implementation must first satisfy
+  `../post-v1-offline-queueing-reentry-rule.md`
 
 ## Expected Visible Outcome
 
