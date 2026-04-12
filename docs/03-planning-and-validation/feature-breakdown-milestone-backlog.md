@@ -249,6 +249,5 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 ## Immediate Next Tasks
 
-The highest-priority implementation tasks immediately after this document are:
-
-1. resolve or explicitly defer the practical v1 performance target for demo-readiness
+No remaining pre-release blockers are open in the current local Milestone 8 path.
+Further work should start from release integration or a newly approved post-v1 task set.

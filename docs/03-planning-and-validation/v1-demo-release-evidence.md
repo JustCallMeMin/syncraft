@@ -93,14 +93,16 @@ target is still unresolved in canonical project memory.
   `TestBrowserShellRejectsCrossOriginWebsocketUpgrade`.
 - The live protocol and persistence path emit structured audit logs for accepted and rejected
   actions without logging raw text payload values.
+- The practical v1 performance baseline is covered by
+  `internal/qa/performance/performance_test.go: TestV1TargetScaleBootstrapAndReconnect`,
+  which verifies rebuild and reconnect complete within `5s` for a `12 KiB` document with
+  a snapshot-plus-delta split at `8 KiB`.
 
 ## Residual Open Issues
 
-- The practical v1 performance target is still open in canonical memory and should be resolved
-  before final demo-readiness sign-off is treated as settled.
+No open pre-release blockers remain in the current local release-evidence path.
 
 ## Next Task
 
-After this evidence page is accepted, the next release-hardening tasks are:
-
-- resolve or explicitly defer the practical v1 performance target in canonical memory
+After this evidence page is accepted, the remaining work should move to branch integration,
+release packaging, or post-v1 scope rather than additional v1 blocker clearance.

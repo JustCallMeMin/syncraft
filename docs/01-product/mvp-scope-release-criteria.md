@@ -167,8 +167,8 @@ The current checklist evidence for these claims is consolidated in
 - [x] Product and technical docs are aligned
 
 These checklist items are satisfied by the current repo state as of 2026-04-12. Final overall
-demo-readiness sign-off is still gated by the unresolved practical v1 performance target tracked
-in canonical project memory.
+demo-readiness sign-off is supported by the current local release evidence, including the
+practical v1 performance baseline documented in `v1-nfr-baseline.md`.
 
 ## Deferred Post-v1 Candidates
 
