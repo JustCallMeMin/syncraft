@@ -167,7 +167,8 @@ The current checklist evidence for these claims is consolidated in
 - [x] Product and technical docs are aligned
 
 These checklist items are satisfied by the current repo state as of 2026-04-12. Final overall
-demo-readiness sign-off is still gated by the open practical v1 performance target tracked in
+demo-readiness sign-off is still gated by open reviewer-security blockers on websocket origin
+restriction and audit logging, plus the unresolved practical v1 performance target tracked in
 canonical project memory.
 
 ## Deferred Post-v1 Candidates

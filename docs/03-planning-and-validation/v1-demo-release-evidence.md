@@ -35,8 +35,9 @@ required by the v1 release checklist.
   `go run ./cmd/demo-server`.
 - Product, planning, and demo docs align with the shipped browser shell.
 
-Final demo-readiness sign-off is not yet fully closed because the practical v1 performance target
-is still open in canonical project memory.
+Final demo-readiness sign-off is not yet fully closed because reviewer-security audit blockers
+remain open and the practical v1 performance target is still unresolved in canonical project
+memory.
 
 ## Release Checklist Mapping
 
@@ -92,14 +93,18 @@ is still open in canonical project memory.
 
 ## Residual Open Issues
 
+- Final reviewer-security sign-off is still blocked by two release-gating findings:
+- `internal/demo/browser/server.go` currently accepts every websocket origin through an
+  unconditional `CheckOrigin` allow-all policy.
+- The live protocol and persistence path still lack structured audit logs for accepted and
+  rejected actions.
 - The practical v1 performance target is still open in canonical memory and should be resolved
   before final demo-readiness sign-off is treated as settled.
-- Final reviewer-security release review for validation, logging, and persistence boundaries
-  should be recorded explicitly as the next gating task.
 
 ## Next Task
 
 After this evidence page is accepted, the next release-hardening tasks are:
 
-- record final reviewer-security sign-off for validation, logging, and persistence boundaries
+- restrict browser demo websocket origin policy to explicit allowed origins
+- add structured audit logging for protocol validation and persistence mutations
 - resolve or explicitly defer the practical v1 performance target in canonical memory

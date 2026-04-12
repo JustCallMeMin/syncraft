@@ -251,6 +251,6 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The highest-priority implementation tasks immediately after this document are:
 
-1. record final reviewer-security sign-off for validation, logging, and persistence boundaries
-2. resolve or explicitly defer the practical v1 performance target for demo-readiness
-3. close the remaining known-issues note about temporary evidence landing locations now that the repo has a dedicated release-evidence page
+1. restrict browser demo websocket origin policy to explicit allowed origins
+2. add structured audit logging for protocol validation and persistence mutations
+3. resolve or explicitly defer the practical v1 performance target for demo-readiness
