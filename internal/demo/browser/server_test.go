@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -136,6 +137,27 @@ func TestBrowserShellSurfacesInvalidCommandError(t *testing.T) {
 	}
 }
 
+func TestBrowserShellRejectsCrossOriginWebsocketUpgrade(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http") + "/ws"
+	header := http.Header{}
+	header.Set("Origin", "http://evil.example")
+	_, response, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err == nil {
+		t.Fatal("Dial() error = nil, want cross-origin rejection")
+	}
+	if response == nil || response.StatusCode != http.StatusForbidden {
+		t.Fatalf("StatusCode = %v, want %d", response, http.StatusForbidden)
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	server, err := NewServer(t.TempDir())
@@ -157,7 +179,9 @@ func mustBrowserServerWithRoot(t *testing.T, root string) *Server {
 func mustDial(t *testing.T, baseURL string) *websocket.Conn {
 	t.Helper()
 	wsURL := "ws" + strings.TrimPrefix(baseURL, "http") + "/ws"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	header := http.Header{}
+	header.Set("Origin", baseURL)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
 	if err != nil {
 		t.Fatalf("Dial(%s) error = %v, want nil", wsURL, err)
 	}

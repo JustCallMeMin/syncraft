@@ -1,8 +1,11 @@
 package live
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/JustCallMeMin/syncraft/internal/backend/persistence"
@@ -265,6 +268,58 @@ func TestHandleRequestCatchupReturnsSnapshotOperationsAndComplete(t *testing.T) 
 	}
 	if _, ok := events[2].(protocol.CatchupCompleteMessage); !ok {
 		t.Fatalf("events[2] = %T, want CatchupCompleteMessage", events[2])
+	}
+}
+
+func TestHandleSubmitLogsAcceptedAndRejectedActions(t *testing.T) {
+	var logBuffer bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
+	service := newService(t)
+	service.SetLogger(logger)
+	ctx := context.Background()
+
+	_, errMsg, err := service.HandleSubmit(ctx, protocol.SubmitOperationMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeSubmitOperation,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_missing",
+			MessageID:       "msg_reject",
+		},
+		Operation: insertOp("doc_1", "op_1", "actor_a", 1, "elem_1", "a"),
+	})
+	if err != nil {
+		t.Fatalf("HandleSubmit() reject error = %v, want nil", err)
+	}
+	if errMsg == nil {
+		t.Fatal("HandleSubmit() reject errMsg = nil, want non-nil")
+	}
+
+	mustHello(t, ctx, service, "sess_1", "actor_a")
+	mustSubscribe(t, ctx, service, "sess_1", "doc_1")
+	_, errMsg, err = service.HandleSubmit(ctx, protocol.SubmitOperationMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeSubmitOperation,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_accept",
+		},
+		Operation: insertOp("doc_1", "op_2", "actor_a", 2, "elem_2", "b"),
+	})
+	if err != nil || errMsg != nil {
+		t.Fatalf("HandleSubmit() accept err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+
+	logOutput := logBuffer.String()
+	if !strings.Contains(logOutput, "reject protocol action") {
+		t.Fatalf("log output = %q, want reject protocol action entry", logOutput)
+	}
+	if !strings.Contains(logOutput, "accept operation") {
+		t.Fatalf("log output = %q, want accept operation entry", logOutput)
+	}
+	if strings.Contains(logOutput, "operation_value") {
+		t.Fatalf("log output = %q, want no raw text payload values", logOutput)
 	}
 }
 

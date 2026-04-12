@@ -251,6 +251,4 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The highest-priority implementation tasks immediately after this document are:
 
-1. restrict browser demo websocket origin policy to explicit allowed origins
-2. add structured audit logging for protocol validation and persistence mutations
-3. resolve or explicitly defer the practical v1 performance target for demo-readiness
+1. resolve or explicitly defer the practical v1 performance target for demo-readiness

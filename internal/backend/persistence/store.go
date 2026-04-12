@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -31,8 +32,9 @@ type SnapshotRecord struct {
 
 // FileStore persists operation logs and snapshots on the local filesystem.
 type FileStore struct {
-	root string
-	mu   sync.Mutex
+	root   string
+	logger *slog.Logger
+	mu     sync.Mutex
 }
 
 // NewFileStore validates the root path and prepares the persistence directory.
@@ -43,7 +45,19 @@ func NewFileStore(root string) (*FileStore, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, fmt.Errorf("create persistence root: %w", err)
 	}
-	return &FileStore{root: root}, nil
+	return &FileStore{
+		root:   root,
+		logger: slog.Default(),
+	}, nil
+}
+
+// SetLogger overrides the audit logger used by the persistence store.
+func (s *FileStore) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		s.logger = slog.Default()
+		return
+	}
+	s.logger = logger
 }
 
 // AppendOperation stores one accepted operation in append-only order.
@@ -76,6 +90,12 @@ func (s *FileStore) AppendOperation(ctx context.Context, op model.Operation) err
 	if _, err := file.Write(append(data, '\n')); err != nil {
 		return fmt.Errorf("append operation: %w", err)
 	}
+	s.logger.InfoContext(ctx, "append operation",
+		"document_id", op.DocumentID,
+		"operation_id", op.OperationID,
+		"actor_id", op.ActorID,
+		"operation_type", op.Type,
+	)
 	return nil
 }
 
@@ -116,6 +136,11 @@ func (s *FileStore) SaveSnapshot(ctx context.Context, snapshot SnapshotRecord) e
 	if err := os.WriteFile(s.latestSnapshotPath(snapshot.DocumentID), data, 0o644); err != nil {
 		return fmt.Errorf("write latest snapshot: %w", err)
 	}
+	s.logger.InfoContext(ctx, "save snapshot",
+		"document_id", snapshot.DocumentID,
+		"snapshot_id", snapshot.SnapshotID,
+		"last_included_operation_id", snapshot.LastIncludedOperationID,
+	)
 	return nil
 }
 

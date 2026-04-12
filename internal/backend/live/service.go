@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ type sessionState struct {
 // Service runs the live sync pipeline over validated protocol messages.
 type Service struct {
 	store    *persistence.FileStore
+	logger   *slog.Logger
 	mu       sync.Mutex
 	sessions map[string]*sessionState
 	docs     map[model.DocumentID]*engine.Document
@@ -36,14 +38,25 @@ type Service struct {
 func NewService(store *persistence.FileStore) *Service {
 	return &Service{
 		store:    store,
+		logger:   slog.Default(),
 		sessions: make(map[string]*sessionState),
 		docs:     make(map[model.DocumentID]*engine.Document),
 	}
 }
 
+// SetLogger overrides the audit logger used by the live sync service.
+func (s *Service) SetLogger(logger *slog.Logger) {
+	if logger == nil {
+		s.logger = slog.Default()
+		return
+	}
+	s.logger = logger
+}
+
 // HandleClientHello validates and registers one live session.
 func (s *Service) HandleClientHello(_ context.Context, msg protocol.ClientHelloMessage) (*protocol.ErrorMessage, error) {
 	if err := msg.Validate(); err != nil {
+		s.logProtocolReject(context.Background(), msg.Envelope, protocol.ErrorCodeInvalidMessageType, err)
 		return protocolError(msg.Envelope, protocol.ErrorCodeInvalidMessageType, err), nil
 	}
 
@@ -55,12 +68,17 @@ func (s *Service) HandleClientHello(_ context.Context, msg protocol.ClientHelloM
 		subscriptions: make(map[model.DocumentID]bool),
 		outbox:        make([]any, 0),
 	}
+	s.logger.Info("register session",
+		"session_id", msg.SessionID,
+		"actor_id", msg.ActorID,
+	)
 	return nil, nil
 }
 
 // HandleSubscribe validates and records a document subscription.
 func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDocumentMessage) (*protocol.SubscribeAckMessage, *protocol.ErrorMessage, error) {
 	if err := msg.Validate(); err != nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidDocumentID, err)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidDocumentID, err), nil
 	}
 
@@ -69,6 +87,7 @@ func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDoc
 
 	session := s.sessions[msg.SessionID]
 	if session == nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession), nil
 	}
 	session.subscriptions[msg.DocumentID] = true
@@ -93,12 +112,19 @@ func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDoc
 		SubscriptionMode: subscriptionMode,
 	}
 	session.outbox = append(session.outbox, *ack)
+	s.logger.InfoContext(ctx, "subscribe document",
+		"session_id", msg.SessionID,
+		"actor_id", session.actorID,
+		"document_id", msg.DocumentID,
+		"subscription_mode", subscriptionMode,
+	)
 	return ack, nil, nil
 }
 
 // HandleRequestCatchup serves snapshot-plus-delta state transfer for one subscribed session.
 func (s *Service) HandleRequestCatchup(ctx context.Context, msg protocol.RequestCatchupMessage) ([]any, *protocol.ErrorMessage, error) {
 	if err := msg.Validate(); err != nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidDocumentID, err)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidDocumentID, err), nil
 	}
 
@@ -107,10 +133,13 @@ func (s *Service) HandleRequestCatchup(ctx context.Context, msg protocol.Request
 
 	session := s.sessions[msg.SessionID]
 	if session == nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession), nil
 	}
 	if !session.subscriptions[msg.DocumentID] {
-		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, fmt.Errorf("session is not subscribed to document")), nil
+		err := fmt.Errorf("session is not subscribed to document")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, err), nil
 	}
 
 	snapshotRecord, laterOps, err := s.catchupStateLocked(ctx, msg.DocumentID, msg.KnownLastOperationID)
@@ -173,6 +202,14 @@ func (s *Service) HandleRequestCatchup(ctx context.Context, msg protocol.Request
 	}
 	out = append(out, completeMsg)
 	session.outbox = append(session.outbox, completeMsg)
+	s.logger.InfoContext(ctx, "serve catchup",
+		"session_id", msg.SessionID,
+		"actor_id", session.actorID,
+		"document_id", msg.DocumentID,
+		"snapshot_id", snapshotRecord.SnapshotID,
+		"snapshot_watermark", snapshotRecord.LastIncludedOperationID,
+		"operation_count", len(laterOps),
+	)
 
 	return out, nil, nil
 }
@@ -180,6 +217,7 @@ func (s *Service) HandleRequestCatchup(ctx context.Context, msg protocol.Request
 // HandleSubmit validates, persists, applies, and broadcasts one operation.
 func (s *Service) HandleSubmit(ctx context.Context, msg protocol.SubmitOperationMessage) ([]protocol.BroadcastOperationMessage, *protocol.ErrorMessage, error) {
 	if err := msg.Validate(); err != nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidOperation, err)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidOperation, err), nil
 	}
 
@@ -188,13 +226,18 @@ func (s *Service) HandleSubmit(ctx context.Context, msg protocol.SubmitOperation
 
 	session := s.sessions[msg.SessionID]
 	if session == nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession), nil
 	}
 	if session.actorID != msg.Operation.ActorID {
-		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidOperation, fmt.Errorf("operation actor_id must match session actor_id")), nil
+		err := fmt.Errorf("operation actor_id must match session actor_id")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidOperation, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidOperation, err), nil
 	}
 	if !session.subscriptions[msg.DocumentID] {
-		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, fmt.Errorf("session is not subscribed to document")), nil
+		err := fmt.Errorf("session is not subscribed to document")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, err), nil
 	}
 
 	doc, err := s.documentLocked(ctx, msg.DocumentID)
@@ -204,9 +247,17 @@ func (s *Service) HandleSubmit(ctx context.Context, msg protocol.SubmitOperation
 
 	result, err := doc.Apply(msg.Operation)
 	if err != nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidOperation, err)
 		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidOperation, err), nil
 	}
 	if result.Status == engine.ApplyStatusDuplicate {
+		s.logger.InfoContext(ctx, "dedupe operation",
+			"session_id", msg.SessionID,
+			"actor_id", session.actorID,
+			"document_id", msg.DocumentID,
+			"operation_id", msg.Operation.OperationID,
+			"operation_type", msg.Operation.Type,
+		)
 		return nil, nil, nil
 	}
 
@@ -234,6 +285,14 @@ func (s *Service) HandleSubmit(ctx context.Context, msg protocol.SubmitOperation
 		_ = sessionID
 		out = append(out, broadcast)
 	}
+	s.logger.InfoContext(ctx, "accept operation",
+		"session_id", msg.SessionID,
+		"actor_id", session.actorID,
+		"document_id", msg.DocumentID,
+		"operation_id", msg.Operation.OperationID,
+		"operation_type", msg.Operation.Type,
+		"subscriber_count", len(out),
+	)
 	return out, nil, nil
 }
 
@@ -330,4 +389,15 @@ func protocolError(envelope protocol.Envelope, code string, err error) *protocol
 		ErrorCode:    code,
 		ErrorMessage: err.Error(),
 	}
+}
+
+func (s *Service) logProtocolReject(ctx context.Context, envelope protocol.Envelope, code string, err error) {
+	s.logger.WarnContext(ctx, "reject protocol action",
+		"session_id", envelope.SessionID,
+		"document_id", envelope.DocumentID,
+		"message_id", envelope.MessageID,
+		"message_type", envelope.MessageType,
+		"error_code", code,
+		"reason", err.Error(),
+	)
 }
