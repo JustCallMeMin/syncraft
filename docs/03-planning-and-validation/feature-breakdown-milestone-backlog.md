@@ -249,5 +249,39 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 ## Immediate Next Tasks
 
-No remaining pre-release blockers are open in the current local Milestone 8 path.
-Further work should start from release integration or a newly approved post-v1 task set.
+The next approved run is the post-v1 offline queueing alpha planning-and-delivery sequence.
+Implementation remains gated by the design-phase tasks in
+[`post-v1-offline-queueing-run-plan.md`](./post-v1-offline-queueing-run-plan.md).
+
+## Milestone 9: Offline Queueing Alpha
+
+### Goal
+
+Introduce a browser-local offline queueing alpha without weakening current convergence,
+replay, and server-boundary guarantees.
+
+### Tasks
+
+- `@agent-founding-engine`: Approve offline queueing alpha scope and ADR
+- `@agent-core-engine`: Update canonical protocol and invariants for offline queued operation replay
+- `@agent-product-docs`: Update PRD and post-v1 scope language for offline queueing alpha
+- `@agent-client`: Implement browser-local queued operation store with IndexedDB
+- `@agent-client`: Persist actor counter and offline queue metadata across browser restart
+- `@agent-client`: Add offline provisional editor state and queued-operation UX
+- `@agent-client`: Implement reconnect queue replay over existing `submit_operation` flow
+- `@agent-qa`: Add offline queue durability and replay test harness
+- `@agent-qa`: Add blocked-queue and local-store-corruption scenarios
+- `@agent-reviewer-security`: Final reviewer-security sign-off for offline queue durability and replay boundaries
+
+### Dependencies
+
+- Milestone 8 complete
+- [`post-v1-offline-queueing-reentry-rule.md`](./post-v1-offline-queueing-reentry-rule.md) accepted as the planning gate
+
+### Exit Criteria
+
+- offline queueing scope is explicitly limited to a post-v1 alpha and no broader product claim
+- canonical protocol and invariants describe replay expectations before implementation proceeds
+- browser-local queue durability survives refresh and restart within the accepted boundary
+- replay after reconnect converges to the same visible state as a continuously online flow
+- blocked-queue behavior is explicit and reviewer-security sign-off is recorded
