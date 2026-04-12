@@ -251,7 +251,6 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The highest-priority implementation tasks immediately after this document are:
 
-1. validate the browser collaboration shell against reconnect, restart recovery, and delivery-irregularity demo paths
-2. harden the browser shell around session reset, reconnect, and operator-visible error handling
-3. align product and demo docs with the shipped browser collaboration path
-4. close remaining release criteria evidence for the end-to-end v1 demo
+1. record final reviewer-security sign-off for validation, logging, and persistence boundaries
+2. resolve or explicitly defer the practical v1 performance target for demo-readiness
+3. close the remaining known-issues note about temporary evidence landing locations now that the repo has a dedicated release-evidence page
