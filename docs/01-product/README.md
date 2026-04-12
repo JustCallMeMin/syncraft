@@ -3,6 +3,8 @@
 Use this folder for product-facing documents that define what Syncraft v1 is
 trying to achieve and how release readiness is judged.
 
+Current repo demo entry point: `go run ./cmd/demo-server`
+
 - [`prd-business-spec.md`](./prd-business-spec.md)
   Canonical product intent, personas, goals, and non-goals.
 - [`mvp-scope-release-criteria.md`](./mvp-scope-release-criteria.md)

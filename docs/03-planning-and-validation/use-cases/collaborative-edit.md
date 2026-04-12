@@ -14,15 +14,17 @@ A second or later collaborator joins the same document and begins submitting edi
 
 1. User A opens a shared document and reaches a stable subscribed state.
 2. User B opens the same document and reaches the same logical baseline.
-3. Both users submit text operations.
-4. The server validates, persists, and broadcasts accepted operations.
-5. Each client applies local and remote operations.
+3. Each client turns plain-text edits into CRDT operations and applies them optimistically locally.
+4. Both users submit text operations.
+5. The server validates, persists, and broadcasts accepted operations.
+6. Each client applies remote operations safely, including its own operations replayed back from the server.
 6. Replicas converge to the same visible result.
 
 ## Alternate Flows
 
 - a later joiner may need catch-up before continuing on live traffic
 - a client may receive its own operation back and handle it idempotently
+- a browser-facing editor layer may surface `connecting`, `catching_up`, or `live` state while collaboration continues
 
 ## Failure Flows
 

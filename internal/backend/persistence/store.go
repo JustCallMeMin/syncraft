@@ -168,8 +168,10 @@ func (s *FileStore) LoadOperationsAfter(ctx context.Context, documentID model.Do
 	defer file.Close()
 
 	ops := make([]model.Operation, 0)
+	allOps := make([]model.Operation, 0)
 	scanner := bufio.NewScanner(file)
 	seenWatermark := after == ""
+	watermarkFound := after == ""
 	for scanner.Scan() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -179,9 +181,11 @@ func (s *FileStore) LoadOperationsAfter(ctx context.Context, documentID model.Do
 		if err := json.Unmarshal(scanner.Bytes(), &op); err != nil {
 			return nil, fmt.Errorf("decode operation log: %w", err)
 		}
+		allOps = append(allOps, op)
 		if !seenWatermark {
 			if op.OperationID == after {
 				seenWatermark = true
+				watermarkFound = true
 			}
 			continue
 		}
@@ -192,6 +196,9 @@ func (s *FileStore) LoadOperationsAfter(ctx context.Context, documentID model.Do
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan operation log: %w", err)
+	}
+	if after != "" && !watermarkFound {
+		return allOps, nil
 	}
 	return ops, nil
 }

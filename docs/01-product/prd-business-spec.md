@@ -103,6 +103,9 @@ documents remain consistent after restart.
 A project team can run a clear demonstration showing multiple editors, concurrent changes,
 reconnect behavior, and persistence-backed recovery without needing rich-text features.
 
+In the current repo, this path is materialized through the shipped browser demo shell
+served by `go run ./cmd/demo-server`.
+
 ## User Stories
 
 - As a collaborator, I want to edit the same plain-text document as another user in real time so we can work together without overwriting each other.
@@ -153,6 +156,19 @@ The following are explicitly out of scope for Syncraft v1:
 - CRDT correctness takes priority over feature breadth.
 - The server acts as relay plus persistence, not as a central conflict resolver.
 - Deterministic replay and convergence are non-negotiable.
+
+## Current Delivery Shape
+
+The currently shipped in-repo product surface is a minimal browser collaboration shell.
+It exists to demonstrate the v1 claims through a real shared editor path, not to present
+a polished standalone frontend product.
+
+What this means in practice:
+
+- the repo includes a browser-accessible plain-text editor for two-user collaboration demos
+- reconnect and restart recovery can be shown through that browser path
+- visible status and error state are part of the current operator-facing story
+- UI polish, onboarding depth, and workspace-style product breadth are still intentionally limited
 
 ## Business Value of v1
 

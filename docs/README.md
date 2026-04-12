@@ -18,6 +18,7 @@ the working mirror used for:
 
 - Product intent: [`01-product/prd-business-spec.md`](./01-product/prd-business-spec.md)
 - Release gate: [`01-product/mvp-scope-release-criteria.md`](./01-product/mvp-scope-release-criteria.md)
+- Browser demo entry: `go run ./cmd/demo-server`
 - Canonical domain and protocol: [`02-canonical/`](./02-canonical/README.md)
 - Planning and validation: [`03-planning-and-validation/`](./03-planning-and-validation/README.md)
 - Documentation workflow: [`04-governance-and-rag/`](./04-governance-and-rag/README.md)

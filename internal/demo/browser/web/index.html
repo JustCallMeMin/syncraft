@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Syncraft Demo Editor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="panel">
+        <h1>Syncraft Demo Editor</h1>
+        <p class="subtitle">Minimal plain-text collaboration shell over the current v1 engine.</p>
+        <form id="connect-form" class="controls">
+          <label>
+            Actor
+            <input id="actor-id" name="actor-id" value="" required />
+          </label>
+          <label>
+            Document
+            <input id="document-id" name="document-id" value="demo-doc" required />
+          </label>
+          <button type="submit">Connect</button>
+          <button id="reconnect-button" type="button">Reconnect</button>
+        </form>
+        <dl class="meta">
+          <div>
+            <dt>Status</dt>
+            <dd id="status">disconnected</dd>
+          </div>
+          <div>
+            <dt>Error</dt>
+            <dd id="error">none</dd>
+          </div>
+        </dl>
+      </section>
+      <section class="panel editor-panel">
+        <label class="editor-label" for="editor">Shared Plain Text</label>
+        <textarea id="editor" spellcheck="false" placeholder="Connect two browser tabs and start typing." disabled></textarea>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

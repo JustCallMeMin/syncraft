@@ -32,6 +32,9 @@ The following capabilities are required for Syncraft v1:
 - recover correctly after backend restart
 - expose enough observability to diagnose failures in development and demo environments
 
+The current repo delivery path for these capabilities is the minimal browser demo shell
+served by `go run ./cmd/demo-server`.
+
 ## In-Scope Technical Foundations
 
 The following foundations are required because the product claims depend on them:
@@ -114,6 +117,17 @@ met:
 - improved onboarding copy
 - broader observability dashboards
 - performance improvements beyond baseline acceptable operation
+
+## Current Implementation Note
+
+The shipped browser surface is intentionally narrow:
+
+- one shared plain-text editor view
+- visible connection and error state
+- reconnect and restart recovery through the same demo path
+
+This is sufficient for v1 release evidence if the correctness and recovery gates are met.
+It should not be described as a broad end-user editing product yet.
 
 ## Release Blockers
 
