@@ -1,47 +1,45 @@
-const STORAGE_KEY = "syncraft:last-session-intent";
-
 /**
- * loadSessionIntent reads the last browser session intent from localStorage.
+ * loadSessionIntent reads the current tab's actor/document intent from the URL query string.
  */
-export function loadSessionIntent(storage = globalThis.localStorage) {
-  if (!storage || typeof storage.getItem !== "function") {
+export function loadSessionIntent(locationLike = globalThis.location) {
+  const search = typeof locationLike?.search === "string" ? locationLike.search : "";
+  const params = new URLSearchParams(search);
+  const actorID = params.get("actor");
+  const documentID = params.get("document");
+  const retry = params.get("retry");
+
+  if (typeof actorID !== "string" || actorID.trim() === "") {
     return null;
   }
-  const raw = storage.getItem(STORAGE_KEY);
-  if (typeof raw !== "string" || raw.trim() === "") {
+  if (typeof documentID !== "string" || documentID.trim() === "") {
     return null;
   }
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-    if (typeof parsed.actorID !== "string" || parsed.actorID.trim() === "") {
-      return null;
-    }
-    if (typeof parsed.documentID !== "string" || parsed.documentID.trim() === "") {
-      return null;
-    }
-    return {
-      actorID: parsed.actorID.trim(),
-      documentID: parsed.documentID.trim(),
-      retry: parsed.retry !== false,
-    };
-  } catch {
-    return null;
-  }
+
+  return {
+    actorID: actorID.trim(),
+    documentID: documentID.trim(),
+    retry: retry !== "false",
+  };
 }
 
 /**
- * saveSessionIntent persists the current browser session intent for refresh recovery.
+ * saveSessionIntent persists the current tab's actor/document intent into the URL query string.
  */
-export function saveSessionIntent(intent, storage = globalThis.localStorage) {
-  if (!storage || typeof storage.setItem !== "function") {
+export function saveSessionIntent(intent, locationLike = globalThis.location, historyLike = globalThis.history) {
+  if (!locationLike || typeof locationLike.href !== "string") {
     return;
   }
-  storage.setItem(STORAGE_KEY, JSON.stringify({
-    actorID: intent.actorID,
-    documentID: intent.documentID,
-    retry: intent.retry !== false,
-  }));
+  if (!historyLike || typeof historyLike.replaceState !== "function") {
+    return;
+  }
+
+  const url = new URL(locationLike.href);
+  url.searchParams.set("actor", intent.actorID);
+  url.searchParams.set("document", intent.documentID);
+  if (intent.retry === false) {
+    url.searchParams.set("retry", "false");
+  } else {
+    url.searchParams.delete("retry");
+  }
+  historyLike.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }

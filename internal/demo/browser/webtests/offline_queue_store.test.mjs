@@ -92,6 +92,53 @@ test("append rejects malformed canonical records", async () => {
   );
 });
 
+test("loadPending rejects corrupted queued operation records already in storage", async () => {
+  const store = new OfflineQueueStore(createFakeIndexedDB());
+  const db = await store.open();
+  db.transaction(["queued_operations"], "readwrite").objectStore("queued_operations").put({
+    record_key: "doc-a::actor-a::op-bad",
+    document_id: "doc-a",
+    actor_id: "actor-a",
+    operation_id: "op-bad",
+    actor_counter: 1,
+    queued_at: "2026-04-13T00:00:00Z",
+    status: "pending",
+    document_actor_status: ["doc-a", "actor-a", "pending"],
+    document_actor: ["doc-a", "actor-a"],
+    operation: {
+      operation_id: "op-bad",
+      actor_id: "actor-a",
+      actor_counter: 2,
+      type: "insert",
+      payload: { value: "x" },
+    },
+  });
+
+  await assert.rejects(
+    store.loadPending("doc-a", "actor-a"),
+    /stored queued operation 1 is corrupted: operation\.actor_counter must match actor_counter/,
+  );
+});
+
+test("loadMetadata rejects corrupted persisted metadata", async () => {
+  const store = new OfflineQueueStore(createFakeIndexedDB());
+  const db = await store.open();
+  db.transaction(["queue_metadata"], "readwrite").objectStore("queue_metadata").put({
+    metadata_key: "doc-a::actor-a",
+    document_id: "doc-a",
+    actor_id: "actor-a",
+    next_actor_counter: 0,
+    pending_queue_count: 1,
+    last_snapshot_id: null,
+    last_operation_id: null,
+  });
+
+  await assert.rejects(
+    store.loadMetadata("doc-a", "actor-a"),
+    /stored queue metadata is corrupted: next_actor_counter must be a positive integer/,
+  );
+});
+
 function makeRecord(overrides = {}) {
   const operationID = overrides.operation_id || "op-1";
   const actorID = overrides.actor_id || "actor-a";

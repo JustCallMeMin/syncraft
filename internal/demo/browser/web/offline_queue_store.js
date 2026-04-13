@@ -39,8 +39,14 @@ export class OfflineQueueStore {
     return this.#runReadonly(db, (transaction, store, resolve, reject) => {
       const request = store.index("document_actor_status").getAll([documentID, actorID, STATUS_PENDING]);
       request.onsuccess = () => {
-        const records = (request.result || []).map(cloneRecord).sort(byActorCounterThenOperationID);
-        resolve(records);
+        try {
+          const records = (request.result || [])
+            .map((record, index) => validateStoredRecord(record, index))
+            .sort(byActorCounterThenOperationID);
+          resolve(records);
+        } catch (error) {
+          reject(error);
+        }
       };
       request.onerror = () => {
         reject(normalizeRequestError("load pending queue records", request.error));
@@ -59,7 +65,14 @@ export class OfflineQueueStore {
       const metadataStore = transaction.objectStore(METADATA_STORE_NAME);
       const request = metadataStore.get(buildMetadataKey(documentID, actorID));
       request.onsuccess = () => {
-        resolve(request.result ? cloneRecord(request.result) : defaultMetadataRecord(documentID, actorID));
+        try {
+          const metadata = request.result
+            ? validateStoredMetadata(request.result)
+            : defaultMetadataRecord(documentID, actorID);
+          resolve(metadata);
+        } catch (error) {
+          reject(error);
+        }
       };
       request.onerror = () => reject(normalizeRequestError("load queue metadata", request.error));
     });
@@ -302,6 +315,22 @@ function normalizeMetadata(metadata) {
     last_snapshot_id: metadata.last_snapshot_id || null,
     last_operation_id: metadata.last_operation_id || null,
   };
+}
+
+function validateStoredRecord(record, index) {
+  try {
+    return normalizeRecord(record);
+  } catch (error) {
+    throw new Error(`stored queued operation ${index + 1} is corrupted: ${error.message}`);
+  }
+}
+
+function validateStoredMetadata(metadata) {
+  try {
+    return normalizeMetadata(metadata);
+  } catch (error) {
+    throw new Error(`stored queue metadata is corrupted: ${error.message}`);
+  }
 }
 
 function byActorCounterThenOperationID(left, right) {

@@ -40,6 +40,7 @@ A disconnected client continues editing locally and later attempts to synchroniz
 - overlap with remote change may be unsafe if merge semantics are not yet canonical
 - local process loss may destroy queued work if durability is insufficient
 - corrupted local queue records may block replay and require explicit recovery guidance
+- corrupted local queue metadata may block reconnect before replay begins
 
 ## Postconditions
 
@@ -57,6 +58,11 @@ A disconnected client continues editing locally and later attempts to synchroniz
   provisional local edits can continue accumulating before replay
 - when a fresh browser session is still waiting for its first ready state, user input is buffered
   until the active session becomes ready instead of being misclassified as an offline or error path
+- same-tab refresh keeps the current actor/document intent in the tab URL; browser restart keeps
+  queue durability metadata, but reconnecting after restart still depends on reconnecting with the
+  intended actor/document for that queued local state
+- blocked queue state must be explicit, read-only, and actionable rather than silently retrying
+  with corrupted local data
 
 ## Related Docs
 

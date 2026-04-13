@@ -45,7 +45,7 @@ test("fresh connect accepts immediate unicode input and continued typing without
 
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${port}`);
-  await page.getByLabel("Actor").fill("actor-unicode-e2e");
+  await page.getByLabel("Actor Instance").fill("actor-unicode-e2e");
   await page.getByLabel("Document").fill("unicode-e2e-doc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.locator("#editor").fill("âââ");

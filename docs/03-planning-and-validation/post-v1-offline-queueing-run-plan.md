@@ -90,6 +90,33 @@ Design gate is complete, and the first client implementation tranche is now in p
 
 The next work in sequence is QA validation and reviewer-security sign-off.
 
+QA durability and replay coverage is now in place:
+
+- browser helper tests cover storage, session restoration, queue state, and sticky-status regressions
+- a Playwright regression covers immediate Unicode input plus continued typing
+- a Playwright durability harness now covers same-profile refresh recovery, same-profile browser
+  restart recovery, and replay equivalence against the online flow
+
+Blocked-queue and local-store-corruption validation is now in place:
+
+- IndexedDB queue loads now validate stored queued-operation records before replay
+- IndexedDB metadata loads now validate persisted actor-counter continuity before reconnect
+- corrupted local queue records and corrupted queue metadata now surface `queue_blocked`
+- blocked queue state disables editing and preserves explicit recovery context instead of
+  continuing silently
+- Playwright regressions now cover corrupted queued-operation replay and corrupted metadata
+  reconnect behavior
+
+Reviewer-security sign-off is now complete:
+
+- replay still goes through the existing `submit_operation` path with no new server merge authority
+- local queue corruption and metadata corruption both fail closed into explicit `queue_blocked`
+- blocked queue state keeps the editor read-only until the local corruption is addressed
+- replay and protocol logs remain structured and omit queued text payload values
+- per-tab actor/document intent isolation avoids cross-tab overwrite of browser-local queue context
+
+The current offline queueing alpha tranche is now complete at the run-plan level.
+
 ## Related Docs
 
 - [`post-v1-offline-queueing-reentry-rule.md`](./post-v1-offline-queueing-reentry-rule.md)

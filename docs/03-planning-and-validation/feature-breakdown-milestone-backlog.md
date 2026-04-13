@@ -251,8 +251,10 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 The next approved run is the post-v1 offline queueing alpha planning-and-delivery sequence.
 The design gate and first client-delivery tranche are complete.
-The next tasks in sequence are the QA and sign-off items in
-[`post-v1-offline-queueing-run-plan.md`](./post-v1-offline-queueing-run-plan.md).
+The durability-and-replay QA harness, corruption-validation tranche, and reviewer-security
+sign-off are now in place. The current offline queueing alpha sequence is complete at the
+milestone level; any next step is a new planning or implementation tranche rather than an
+unclosed Milestone 9 blocker.
 
 ## Milestone 9: Offline Queueing Alpha
 

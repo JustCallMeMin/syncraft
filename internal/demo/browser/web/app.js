@@ -676,3 +676,11 @@ function setStatus(state, errorText) {
   errorNode.textContent = nextStatus.errorText;
 }
 
+window.syncraftBrowserTestAPI = {
+  forceDisconnect() {
+    if (socket) {
+      socket.close();
+    }
+  },
+};
+
