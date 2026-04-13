@@ -6,8 +6,9 @@ This document defines the v1 synchronization protocol for Syncraft. It specifies
 message envelope, operation payloads, replay rules, reconnect flow, validation rules, and
 failure handling required to preserve deterministic convergence.
 
-This document is intentionally narrow. It covers only the protocol and state transfer
-required for plain-text collaboration in v1.
+This document is intentionally narrow. It covers the protocol and state transfer required for
+plain-text collaboration in v1, plus the accepted replay boundary for the post-v1 offline
+queueing alpha.
 
 Terminology in this document follows `./domain-glossary.md`. In particular, `operation`
 is the canonical term for one CRDT change unit, while `event` is reserved for lifecycle and
@@ -32,6 +33,9 @@ This protocol spec does not cover:
 - rich-text or block document semantics
 - presence features beyond minimal session connection semantics
 - post-v1 compaction or tombstone garbage collection
+
+This protocol spec does not by itself promise broad offline-first behavior. The only approved
+post-v1 direction captured here is the replay boundary for the browser-only offline queueing alpha.
 
 ## Protocol Goals
 
@@ -412,6 +416,24 @@ chooses to provide a fresh snapshot baseline.
 The client must treat the subscription as not yet current until `catchup_complete` is received for
 that reconnect transfer.
 
+## Post-v1 Offline Queueing Alpha Replay Boundary
+
+The accepted post-v1 offline queueing alpha must preserve the existing reconnect sequence rather
+than introduce a separate server-managed merge path.
+
+### Rules
+
+- the client may queue canonical CRDT operations locally while disconnected
+- queued local operations are provisional local state until replay succeeds
+- the client must complete normal catch-up first and only replay queued operations after
+  `catchup_complete`
+- replayed queued operations must use the existing `submit_operation` path
+- the server must continue acting as relay plus persistence and must not gain a special offline
+  merge authority for this alpha
+- the accepted durability boundary for this alpha is one local browser profile or device only
+- this boundary does not imply cross-device portability, cross-tab coordination, or a broad
+  offline-first product claim
+
 ### Catch-Up Metadata Rules
 
 - `catchup_id` identifies one reconnect transfer session
@@ -428,6 +450,10 @@ that reconnect transfer.
 - replay order may vary at delivery time, but final convergence must not
 - server persistence order must not be treated as the source of merge truth
 - deterministic tie-breaking must be defined by CRDT semantics, not websocket arrival order
+- when post-v1 offline queue replay is implemented, queued operations must be replayed in original
+  actor-counter order after normal catch-up completes
+- duplicate replay of already accepted queued operations must remain harmless through canonical
+  operation deduplication
 
 ## Duplicate Handling
 
@@ -520,6 +546,8 @@ Logs must exclude sensitive values where not required and must not treat logs as
 - [`../01-product/prd-business-spec.md`](../01-product/prd-business-spec.md)
 - [`../01-product/user-journeys-demo-script.md`](../01-product/user-journeys-demo-script.md)
 - [`../01-product/mvp-scope-release-criteria.md`](../01-product/mvp-scope-release-criteria.md)
+- [`../03-planning-and-validation/offline-queueing-alpha-adr.md`](../03-planning-and-validation/offline-queueing-alpha-adr.md)
+- [`../03-planning-and-validation/use-cases/offline-queueing.md`](../03-planning-and-validation/use-cases/offline-queueing.md)
 - ADR-001
 - ADR-002
 - ADR-003

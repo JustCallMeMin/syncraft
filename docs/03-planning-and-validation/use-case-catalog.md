@@ -23,7 +23,10 @@ and validate Syncraft behavior.
 ## Deferred Or Out-Of-Scope Use Cases
 
 - [`use-cases/offline-queueing.md`](./use-cases/offline-queueing.md)
-  Re-entry is governed by [`post-v1-offline-queueing-reentry-rule.md`](./post-v1-offline-queueing-reentry-rule.md).
+  Deferred for v1. Post-v1 alpha planning is governed by
+  [`post-v1-offline-queueing-reentry-rule.md`](./post-v1-offline-queueing-reentry-rule.md),
+  [`post-v1-offline-queueing-run-plan.md`](./post-v1-offline-queueing-run-plan.md), and
+  [`offline-queueing-alpha-adr.md`](./offline-queueing-alpha-adr.md).
 
 ## Decision Anchors
 
@@ -31,3 +34,4 @@ and validate Syncraft behavior.
 - CRDT model choice: ADR-003
 - protocol behavior: [`../02-canonical/protocol-spec.md`](../02-canonical/protocol-spec.md)
 - correctness: [`../02-canonical/canonical-invariants.md`](../02-canonical/canonical-invariants.md)
+- post-v1 offline queueing alpha: [`offline-queueing-alpha-adr.md`](./offline-queueing-alpha-adr.md)
