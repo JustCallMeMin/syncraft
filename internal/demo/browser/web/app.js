@@ -1,3 +1,5 @@
+import { createOfflineQueueStore } from "/offline_queue_store.js";
+
 const form = document.getElementById("connect-form");
 const actorInput = document.getElementById("actor-id");
 const documentInput = document.getElementById("document-id");
@@ -11,24 +13,28 @@ let applyingRemoteState = false;
 let lastText = "";
 let reconnectTimer = null;
 let sessionIntent = null;
+let queueStore = null;
+let pendingQueueRecords = [];
 
 actorInput.value = actorInput.value || `actor-${Math.random().toString(36).slice(2, 8)}`;
 
-form.addEventListener("submit", (event) => {
+initializeQueueStore();
+
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  connect({
+  await connect({
     actorID: actorInput.value.trim(),
     documentID: documentInput.value.trim(),
     retry: true,
   });
 });
 
-reconnectButton.addEventListener("click", () => {
+reconnectButton.addEventListener("click", async () => {
   if (!sessionIntent) {
     setStatus("error", "connect once before trying to reconnect");
     return;
   }
-  connect(sessionIntent);
+  await connect(sessionIntent);
 });
 
 editor.addEventListener("input", () => {
@@ -60,9 +66,13 @@ editor.addEventListener("input", () => {
   }
 });
 
-function connect(intent) {
+async function connect(intent) {
   sessionIntent = intent;
   window.clearTimeout(reconnectTimer);
+
+  if (!(await loadPendingQueue(intent))) {
+    return;
+  }
 
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.close();
@@ -101,7 +111,11 @@ function connect(intent) {
     editor.disabled = true;
     reconnectButton.disabled = false;
     if (intent.retry) {
-      reconnectTimer = window.setTimeout(() => connect(intent), 750);
+      reconnectTimer = window.setTimeout(() => {
+        connect(intent).catch((error) => {
+          setStatus("error", error.message);
+        });
+      }, 750);
     }
   });
 
@@ -110,6 +124,36 @@ function connect(intent) {
     editor.disabled = true;
     reconnectButton.disabled = false;
   });
+}
+
+async function initializeQueueStore() {
+  try {
+    queueStore = createOfflineQueueStore();
+    await queueStore.open();
+    window.syncraftOfflineQueueStore = queueStore;
+  } catch (error) {
+    queueStore = null;
+    setStatus("error", `offline queue store init failed: ${error.message}`);
+  }
+}
+
+async function loadPendingQueue(intent) {
+  if (!queueStore) {
+    await initializeQueueStore();
+  }
+  if (!queueStore) {
+    return false;
+  }
+  try {
+    pendingQueueRecords = await queueStore.loadPending(intent.documentID, intent.actorID);
+    window.syncraftPendingQueueRecords = pendingQueueRecords;
+    return true;
+  } catch (error) {
+    setStatus("error", `offline queue load failed: ${error.message}`);
+    editor.disabled = true;
+    reconnectButton.disabled = false;
+    return false;
+  }
 }
 
 function setStatus(state, errorText) {
