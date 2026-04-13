@@ -79,7 +79,16 @@ guarded by design approval, canonical updates, QA coverage, and reviewer-securit
 ## Current Status
 
 Planning approved.
-Implementation remains gated by the design-phase tasks above.
+Design gate is complete, and the first client implementation tranche is now in place:
+
+- browser-local queued-operation durability exists via IndexedDB
+- actor-counter and reconnect metadata survive same-profile restart
+- provisional, replaying, and blocked queue states are explicit in the browser shell
+- healthy disconnected browser sessions remain editable so offline queueing is usable in practice
+- reconnect replay now submits queued canonical operations through the existing browser
+  `submit_operation` path after normal catch-up completes
+
+The next work in sequence is QA validation and reviewer-security sign-off.
 
 ## Related Docs
 

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Syncraft">
+  <rect width="64" height="64" rx="16" fill="#0f766e"/>
+  <path d="M18 21c0-3.314 2.686-6 6-6h16c3.314 0 6 2.686 6 6v4h-8v-2H26v4.5c0 1.381 1.119 2.5 2.5 2.5h7c5.247 0 9.5 4.253 9.5 9.5S40.747 49 35.5 49H19v-8h16.5c.828 0 1.5-.672 1.5-1.5S36.328 38 35.5 38h-7C22.701 38 18 33.299 18 27.5V21z" fill="#fffaf1"/>
+</svg>

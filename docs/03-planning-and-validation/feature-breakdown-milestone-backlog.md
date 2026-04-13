@@ -250,7 +250,8 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 ## Immediate Next Tasks
 
 The next approved run is the post-v1 offline queueing alpha planning-and-delivery sequence.
-Implementation remains gated by the design-phase tasks in
+The design gate and first client-delivery tranche are complete.
+The next tasks in sequence are the QA and sign-off items in
 [`post-v1-offline-queueing-run-plan.md`](./post-v1-offline-queueing-run-plan.md).
 
 ## Milestone 9: Offline Queueing Alpha

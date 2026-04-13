@@ -2,8 +2,8 @@
 
 ## Status
 
-Deferred for v1. The next approved run treats this as a post-v1 alpha only, not a broad
-offline-first commitment.
+Deferred for v1. The current post-v1 alpha run is now implementing the browser-only queueing
+path, but it still remains a constrained alpha rather than a broad offline-first commitment.
 
 ## Preconditions
 
@@ -20,7 +20,8 @@ A disconnected client continues editing locally and later attempts to synchroniz
 
 1. The client loses connectivity.
 2. The user continues editing locally.
-3. The client records queued operations.
+3. The browser client builds canonical queued operations from local visible-element state and
+   persists them in IndexedDB.
 4. Connectivity returns and the client reconnects.
 5. The client completes normal reconnect catch-up first.
 6. The client replays queued canonical operations through the normal submission path.
@@ -31,6 +32,8 @@ A disconnected client continues editing locally and later attempts to synchroniz
 - offline edits may be shown as provisional local state
 - future versions may require explicit conflict UX
 - the first post-v1 alpha is browser-only and limited to one local browser profile or device
+- the current browser shell uses visible-element state from the demo server to build local
+  canonical operations before reconnect replay
 
 ## Failure Flows
 
@@ -42,7 +45,7 @@ A disconnected client continues editing locally and later attempts to synchroniz
 
 - no canonical v1 behavior is promised here yet
 - the currently accepted post-v1 alpha boundary is browser-only with same-profile durability
-- future implementation still requires explicit promotion into product and technical specs
+- broader offline-first behavior still requires explicit promotion into product and technical specs
 - any post-v1 implementation must first satisfy
   `../post-v1-offline-queueing-reentry-rule.md`
 
@@ -50,6 +53,10 @@ A disconnected client continues editing locally and later attempts to synchroniz
 
 - no required v1 visible outcome exists because the scenario is deferred from v1
 - in the post-v1 alpha, offline local state must be visibly provisional until replay succeeds
+- when browser-local queue state is healthy, the editor remains writable while disconnected so
+  provisional local edits can continue accumulating before replay
+- when a fresh browser session is still waiting for its first ready state, user input is buffered
+  until the active session becomes ready instead of being misclassified as an offline or error path
 
 ## Related Docs
 

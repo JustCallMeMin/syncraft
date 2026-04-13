@@ -42,10 +42,16 @@ type Session struct {
 
 // Metadata captures restart-relevant browser-facing session metadata.
 type Metadata struct {
-	NextActorCounter   uint64
-	LastSnapshotID     *model.SnapshotID
-	LastOperationID    *model.OperationID
-	PendingQueueCount  int
+	NextActorCounter  uint64
+	LastSnapshotID    *model.SnapshotID
+	LastOperationID   *model.OperationID
+	PendingQueueCount int
+}
+
+// VisibleElement is the browser-facing CRDT element view needed for offline queueing.
+type VisibleElement struct {
+	ID    model.ElementID
+	Value string
 }
 
 // NewSession constructs one browser-facing plain-text editor session.
@@ -82,6 +88,19 @@ func (s *Session) ViewMetadata() Metadata {
 	}
 }
 
+// ViewVisibleElements returns the current visible element list in document order.
+func (s *Session) ViewVisibleElements() []VisibleElement {
+	visible := s.visibleElements()
+	out := make([]VisibleElement, 0, len(visible))
+	for _, elem := range visible {
+		out = append(out, VisibleElement{
+			ID:    elem.ID,
+			Value: elem.Value,
+		})
+	}
+	return out
+}
+
 // SetNextActorCounter overrides the next actor counter for restart continuity.
 func (s *Session) SetNextActorCounter(nextCounter uint64) error {
 	if nextCounter == 0 {
@@ -113,6 +132,7 @@ func (s *Session) ApplyCatchupSnapshot(msg protocol.CatchupSnapshotMessage) erro
 		s.setError(err)
 		return err
 	}
+	s.advanceCounterFromSnapshotWatermark()
 	s.syncVisibleText()
 	return nil
 }
@@ -123,6 +143,7 @@ func (s *Session) ApplyCatchupOperations(msg protocol.CatchupOperationsMessage) 
 		s.setError(err)
 		return err
 	}
+	s.advanceCounterFromOperations(msg.Operations)
 	s.syncVisibleText()
 	return nil
 }
@@ -144,6 +165,7 @@ func (s *Session) ApplyRemoteBroadcast(msg protocol.BroadcastOperationMessage) e
 		s.setError(err)
 		return err
 	}
+	s.advanceCounterFromOperation(msg.Operation)
 	s.syncVisibleText()
 	return nil
 }
@@ -273,6 +295,30 @@ func (s *Session) allocateCounter() uint64 {
 	counter := s.nextCounter
 	s.nextCounter++
 	return counter
+}
+
+func (s *Session) advanceCounterFromOperations(operations []model.Operation) {
+	for _, op := range operations {
+		s.advanceCounterFromOperation(op)
+	}
+}
+
+func (s *Session) advanceCounterFromOperation(op model.Operation) {
+	if op.ActorID != s.actorID {
+		return
+	}
+	nextCounter := op.ActorCounter + 1
+	if nextCounter > s.nextCounter {
+		s.nextCounter = nextCounter
+	}
+}
+
+func (s *Session) advanceCounterFromSnapshotWatermark() {
+	snapshot, err := s.replica.Snapshot()
+	if err != nil {
+		return
+	}
+	s.advanceCounterFromOperations(snapshot.Applied)
 }
 
 func (s *Session) syncVisibleText() {

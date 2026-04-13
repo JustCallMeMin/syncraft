@@ -27,27 +27,55 @@ import (
 var webAssets embed.FS
 
 type browserCommand struct {
-	Type              string           `json:"type"`
-	ActorID           model.ActorID    `json:"actor_id,omitempty"`
-	DocumentID        model.DocumentID `json:"document_id,omitempty"`
-	Index             int              `json:"index,omitempty"`
-	Value             string           `json:"value,omitempty"`
-	NextActorCounter  uint64           `json:"next_actor_counter,omitempty"`
-	ActorCounterStart uint64           `json:"actor_counter_start,omitempty"`
-	ActorCounter      uint64           `json:"actor_counter,omitempty"`
+	Type              string            `json:"type"`
+	ActorID           model.ActorID     `json:"actor_id,omitempty"`
+	DocumentID        model.DocumentID  `json:"document_id,omitempty"`
+	Index             int               `json:"index,omitempty"`
+	Value             string            `json:"value,omitempty"`
+	NextActorCounter  uint64            `json:"next_actor_counter,omitempty"`
+	ActorCounterStart uint64            `json:"actor_counter_start,omitempty"`
+	ActorCounter      uint64            `json:"actor_counter,omitempty"`
+	Operation         *browserOperation `json:"operation,omitempty"`
 }
 
 type browserStateMessage struct {
-	Type            string                 `json:"type"`
-	ActorID         model.ActorID          `json:"actor_id,omitempty"`
-	DocumentID      model.DocumentID       `json:"document_id,omitempty"`
-	Text            string                 `json:"text,omitempty"`
-	ConnectionState editor.ConnectionState `json:"connection_state,omitempty"`
-	LastError       string                 `json:"last_error,omitempty"`
-	NextActorCounter uint64                `json:"next_actor_counter,omitempty"`
-	LastSnapshotID   *model.SnapshotID     `json:"last_snapshot_id,omitempty"`
-	LastOperationID  *model.OperationID    `json:"last_operation_id,omitempty"`
-	PendingQueueCount int                  `json:"pending_queue_count,omitempty"`
+	Type              string                  `json:"type"`
+	ActorID           model.ActorID           `json:"actor_id,omitempty"`
+	DocumentID        model.DocumentID        `json:"document_id,omitempty"`
+	Text              string                  `json:"text,omitempty"`
+	ConnectionState   editor.ConnectionState  `json:"connection_state,omitempty"`
+	LastError         string                  `json:"last_error,omitempty"`
+	NextActorCounter  uint64                  `json:"next_actor_counter,omitempty"`
+	LastSnapshotID    *model.SnapshotID       `json:"last_snapshot_id,omitempty"`
+	LastOperationID   *model.OperationID      `json:"last_operation_id,omitempty"`
+	PendingQueueCount int                     `json:"pending_queue_count,omitempty"`
+	VisibleElements   []browserVisibleElement `json:"visible_elements,omitempty"`
+}
+
+type browserVisibleElement struct {
+	ID    model.ElementID `json:"id"`
+	Value string          `json:"value"`
+}
+
+type browserOperation struct {
+	DocumentID    model.DocumentID      `json:"document_id"`
+	OperationID   model.OperationID     `json:"operation_id"`
+	ActorID       model.ActorID         `json:"actor_id"`
+	ActorCounter  uint64                `json:"actor_counter"`
+	Type          model.OperationType   `json:"type"`
+	InsertPayload *browserInsertPayload `json:"insert_payload,omitempty"`
+	DeletePayload *browserDeletePayload `json:"delete_payload,omitempty"`
+}
+
+type browserInsertPayload struct {
+	ElementID     model.ElementID  `json:"element_id"`
+	Value         string           `json:"value"`
+	LeftOriginID  *model.ElementID `json:"left_origin_id,omitempty"`
+	RightOriginID *model.ElementID `json:"right_origin_id,omitempty"`
+}
+
+type browserDeletePayload struct {
+	TargetElementID model.ElementID `json:"target_element_id"`
 }
 
 type browserClient struct {
@@ -101,6 +129,16 @@ func (s *Server) Handler() (http.Handler, error) {
 		return nil, fmt.Errorf("prepare embedded web assets: %w", err)
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		asset, readErr := fs.ReadFile(subtree, "favicon.svg")
+		if readErr != nil {
+			http.Error(w, "favicon not available", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(asset)
+	})
 	mux.Handle("/", http.FileServerFS(subtree))
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	return mux, nil
@@ -156,6 +194,8 @@ func (s *Server) handleCommand(ctx context.Context, conn *websocket.Conn, comman
 		return s.handleInsert(ctx, conn, command)
 	case "delete_at":
 		return s.handleDelete(ctx, conn, command)
+	case "submit_operation":
+		return s.handleSubmitOperation(ctx, conn, command)
 	default:
 		return fmt.Errorf("unsupported browser command type %q", command.Type)
 	}
@@ -285,6 +325,30 @@ func (s *Server) handleDelete(ctx context.Context, conn *websocket.Conn, command
 	return s.writeState(client)
 }
 
+func (s *Server) handleSubmitOperation(ctx context.Context, conn *websocket.Conn, command browserCommand) error {
+	client := s.lookupClient(conn)
+	if client == nil {
+		return fmt.Errorf("browser session is not initialized")
+	}
+	if command.Operation == nil {
+		return fmt.Errorf("submit_operation requires one canonical operation payload")
+	}
+	op, err := command.Operation.toModelOperation()
+	if err != nil {
+		return err
+	}
+	if op.DocumentID != client.documentID {
+		return fmt.Errorf("submit operation document_id %q does not match session document_id %q", op.DocumentID, client.documentID)
+	}
+	if op.ActorID != client.actorID {
+		return fmt.Errorf("submit operation actor_id %q does not match session actor_id %q", op.ActorID, client.actorID)
+	}
+	if err := s.submitAndFanout(ctx, client, op); err != nil {
+		return err
+	}
+	return s.writeState(client)
+}
+
 func (s *Server) submitAndFanout(ctx context.Context, origin *browserClient, op model.Operation) error {
 	broadcasts, submitErr, err := s.service.HandleSubmit(ctx, protocol.SubmitOperationMessage{
 		Envelope: protocol.Envelope{
@@ -348,17 +412,26 @@ func (s *Server) applyCatchupEvents(client *browserClient, events []any) error {
 func (s *Server) writeState(client *browserClient) error {
 	state := client.editor.ViewState()
 	metadata := client.editor.ViewMetadata()
+	visibleElements := client.editor.ViewVisibleElements()
+	browserVisible := make([]browserVisibleElement, 0, len(visibleElements))
+	for _, elem := range visibleElements {
+		browserVisible = append(browserVisible, browserVisibleElement{
+			ID:    elem.ID,
+			Value: elem.Value,
+		})
+	}
 	return s.writeJSON(client.conn, browserStateMessage{
-		Type:            "state",
-		ActorID:         client.actorID,
-		DocumentID:      client.documentID,
-		Text:            state.Text,
-		ConnectionState: state.ConnectionState,
-		LastError:       state.LastError,
-		NextActorCounter: metadata.NextActorCounter,
-		LastSnapshotID:   metadata.LastSnapshotID,
-		LastOperationID:  metadata.LastOperationID,
+		Type:              "state",
+		ActorID:           client.actorID,
+		DocumentID:        client.documentID,
+		Text:              state.Text,
+		ConnectionState:   state.ConnectionState,
+		LastError:         state.LastError,
+		NextActorCounter:  metadata.NextActorCounter,
+		LastSnapshotID:    metadata.LastSnapshotID,
+		LastOperationID:   metadata.LastOperationID,
 		PendingQueueCount: metadata.PendingQueueCount,
+		VisibleElements:   browserVisible,
 	})
 }
 
@@ -433,4 +506,31 @@ func (s *Server) nextSessionID() string {
 
 func clientMessageID(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, time.Now().UTC().UnixNano())
+}
+
+func (o browserOperation) toModelOperation() (model.Operation, error) {
+	op := model.Operation{
+		DocumentID:   o.DocumentID,
+		OperationID:  o.OperationID,
+		ActorID:      o.ActorID,
+		ActorCounter: o.ActorCounter,
+		Type:         o.Type,
+	}
+	if o.InsertPayload != nil {
+		op.InsertPayload = &model.InsertPayload{
+			ElementID:     o.InsertPayload.ElementID,
+			Value:         o.InsertPayload.Value,
+			LeftOriginID:  o.InsertPayload.LeftOriginID,
+			RightOriginID: o.InsertPayload.RightOriginID,
+		}
+	}
+	if o.DeletePayload != nil {
+		op.DeletePayload = &model.DeletePayload{
+			TargetElementID: o.DeletePayload.TargetElementID,
+		}
+	}
+	if err := op.Validate(); err != nil {
+		return model.Operation{}, err
+	}
+	return op, nil
 }
