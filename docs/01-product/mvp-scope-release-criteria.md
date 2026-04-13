@@ -195,3 +195,8 @@ Its currently accepted boundary is:
 This note does not expand the v1 scope.
 It exists so product and planning docs do not accidentally describe the next run as broad
 offline-first support.
+
+The next planning tranche after that alpha is observability UX for the shipped browser demo
+shell. Its currently accepted direction is a minimal in-app debug panel for demo and operator
+diagnosis while logs remain the primary technical audit source. Broader dashboards remain out
+of scope.

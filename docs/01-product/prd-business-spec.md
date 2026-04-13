@@ -186,9 +186,9 @@ form. The immediate value is not broad office productivity. The immediate value 
 
 ## Post-v1 Direction
 
-The next approved run after the v1 baseline is a narrow offline queueing alpha.
+The repo now includes a narrow post-v1 offline queueing alpha on top of the v1 baseline.
 
-That direction is intentionally limited:
+That direction remains intentionally limited:
 
 - browser-only
 - one local browser profile or device
@@ -199,7 +199,13 @@ This is not a broad offline-first product promise.
 It is a constrained post-v1 experiment that must preserve the existing convergence and replay
 story.
 
+The next planning tranche after that alpha is observability UX for the browser demo shell.
+Its accepted direction is:
+
+- keep logs as the primary audit source
+- add a minimal in-app debug panel for operator-facing diagnosis
+- keep broader dashboards out of scope
+
 ## Open Questions
 
 - Which initial demo scenario best communicates value to non-technical reviewers?
-- How much observability should be exposed in the product UI versus only in logs and test tooling?

@@ -12,6 +12,8 @@ Use this folder for execution sequencing and proof-oriented documents.
   Planning gate that must be satisfied before offline queueing leaves deferred status.
 - [`post-v1-offline-queueing-run-plan.md`](./post-v1-offline-queueing-run-plan.md)
   Approved next-run sequence for the post-v1 offline queueing alpha.
+- [`observability-ux-run-plan.md`](./observability-ux-run-plan.md)
+  Approved planning tranche for the next post-v1 observability UX run.
 - [`offline-queueing-alpha-adr.md`](./offline-queueing-alpha-adr.md)
   Accepted decision for the post-v1 offline queueing alpha scope and durability boundary.
 - [`use-cases/`](./use-cases/)

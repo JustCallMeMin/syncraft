@@ -33,6 +33,7 @@ The shell now includes:
 - a reconnect button for manual recovery during demos
 - automatic reconnect retry after websocket drops
 - visible status and error reporting for operator-facing troubleshooting
+- browser-local offline queueing alpha behavior in the current `main` branch
 
 ## Primary Audience
 
@@ -165,7 +166,7 @@ The system remains correct even when the network behaves badly.
 
 ### Demo Notes
 
-- this can be shown through logs, a test harness view, or a controlled debug panel
+- this can be shown through logs, a test harness view, or the planned controlled debug panel
 - keep the scenario compact so the audience can still track the text outcome
 
 ## Journey 5: Server Restart Recovery
@@ -241,3 +242,9 @@ editing that is correct, deterministic to recover, and resilient to operational 
 - reconnect requires a manual refresh that bypasses the intended recovery flow
 - restart recovery produces missing or duplicated text
 - the demo can only succeed under ideal in-order single-client conditions
+
+## Next Demo-Support Direction
+
+The next approved planning tranche for the browser demo shell is a minimal in-app debug panel.
+It is intended to make reconnect, replay, blocked-queue, and corruption states legible during
+operator-facing demos without replacing terminal logs as the canonical technical audit source.

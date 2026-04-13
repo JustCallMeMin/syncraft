@@ -249,12 +249,10 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 
 ## Immediate Next Tasks
 
-The next approved run is the post-v1 offline queueing alpha planning-and-delivery sequence.
-The design gate and first client-delivery tranche are complete.
-The durability-and-replay QA harness, corruption-validation tranche, and reviewer-security
-sign-off are now in place. The current offline queueing alpha sequence is complete at the
-milestone level; any next step is a new planning or implementation tranche rather than an
-unclosed Milestone 9 blocker.
+The post-v1 offline queueing alpha is now merged into `main`.
+Its design gate, client tranche, QA validation, and reviewer-security sign-off are complete.
+The next approved run is the planning-first `Observability UX` tranche documented in
+[`observability-ux-run-plan.md`](./observability-ux-run-plan.md).
 
 ## Milestone 9: Offline Queueing Alpha
 
@@ -288,3 +286,33 @@ replay, and server-boundary guarantees.
 - browser-local queue durability survives refresh and restart within the accepted boundary
 - replay after reconnect converges to the same visible state as a continuously online flow
 - blocked-queue behavior is explicit and reviewer-security sign-off is recorded
+
+## Milestone 10: Observability UX
+
+### Goal
+
+Introduce a minimal in-app debug panel for demo and operator-facing diagnosis without
+expanding Syncraft into a dashboard-oriented product.
+
+### Tasks
+
+- `@agent-founding-engine`: Approve observability UX scope and debug-panel ADR
+- `@agent-product-docs`: Update PRD, MVP scope, and demo script for the observability UX decision
+- `@agent-client`: Define browser debug event model and bounded event buffer policy
+- `@agent-client`: Implement collapsible in-app debug panel shell
+- `@agent-client`: Surface session, queue, and replay diagnostics in the debug panel
+- `@agent-client`: Add recent event timeline without payload leakage
+- `@agent-qa`: Add regression coverage for observability panel state and blocked-queue diagnostics
+- `@agent-reviewer-security`: Review observability UX boundaries and event redaction policy
+
+### Dependencies
+
+- Milestone 9 complete and merged into `main`
+- the observability decision is resolved in favor of a minimal in-app debug panel
+
+### Exit Criteria
+
+- logs remain the canonical audit trail
+- the browser demo exposes enough observability for operator-facing diagnosis without opening terminal logs
+- the panel remains collapsed by default and does not widen product scope
+- blocked queue, reconnect, and replay transitions are legible without exposing raw text payloads
