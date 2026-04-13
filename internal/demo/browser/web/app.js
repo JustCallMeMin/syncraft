@@ -1,4 +1,5 @@
 import { createOfflineQueueStore } from "/offline_queue_store.js";
+import { deriveQueueSurfaceState } from "/queue_ui_state.js";
 
 const form = document.getElementById("connect-form");
 const actorInput = document.getElementById("actor-id");
@@ -6,6 +7,7 @@ const documentInput = document.getElementById("document-id");
 const reconnectButton = document.getElementById("reconnect-button");
 const editor = document.getElementById("editor");
 const statusNode = document.getElementById("status");
+const queueSummaryNode = document.getElementById("queue-summary");
 const errorNode = document.getElementById("error");
 
 let socket = null;
@@ -16,6 +18,8 @@ let sessionIntent = null;
 let queueStore = null;
 let pendingQueueRecords = [];
 let queueMetadata = null;
+let queueBlockedReason = "";
+let reconnectingWithQueue = false;
 
 actorInput.value = actorInput.value || `actor-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -87,6 +91,7 @@ async function connect(intent) {
   if (!(await loadQueueMetadata(intent))) {
     return;
   }
+  reconnectingWithQueue = pendingQueueRecords.length > 0;
 
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.close();
@@ -116,6 +121,7 @@ async function connect(intent) {
     editor.value = message.text || "";
     lastText = editor.value;
     applyingRemoteState = false;
+    reconnectingWithQueue = false;
     setStatus(message.connection_state || "live", message.last_error || "");
     editor.disabled = message.connection_state === "error" || message.connection_state === "connecting";
     reconnectButton.disabled = false;
@@ -149,9 +155,12 @@ async function initializeQueueStore() {
     queueStore = createOfflineQueueStore();
     await queueStore.open();
     window.syncraftOfflineQueueStore = queueStore;
+    queueBlockedReason = "";
+    setStatus(statusNode.textContent || "disconnected", errorNode.textContent === "none" ? "" : errorNode.textContent);
   } catch (error) {
     queueStore = null;
-    setStatus("error", `offline queue store init failed: ${error.message}`);
+    queueBlockedReason = `offline queue store init failed: ${error.message}`;
+    setStatus("error", queueBlockedReason);
   }
 }
 
@@ -165,9 +174,12 @@ async function loadPendingQueue(intent) {
   try {
     pendingQueueRecords = await queueStore.loadPending(intent.documentID, intent.actorID);
     window.syncraftPendingQueueRecords = pendingQueueRecords;
+    queueBlockedReason = "";
+    setStatus(statusNode.textContent || "disconnected", errorNode.textContent === "none" ? "" : errorNode.textContent);
     return true;
   } catch (error) {
-    setStatus("error", `offline queue load failed: ${error.message}`);
+    queueBlockedReason = `offline queue load failed: ${error.message}`;
+    setStatus("error", queueBlockedReason);
     editor.disabled = true;
     reconnectButton.disabled = false;
     return false;
@@ -183,9 +195,12 @@ async function loadQueueMetadata(intent) {
     queueMetadata.pending_queue_count = pendingQueueRecords.length;
     queueMetadata = await queueStore.saveMetadata(queueMetadata);
     window.syncraftQueueMetadata = queueMetadata;
+    queueBlockedReason = "";
+    setStatus(statusNode.textContent || "disconnected", errorNode.textContent === "none" ? "" : errorNode.textContent);
     return true;
   } catch (error) {
-    setStatus("error", `offline metadata load failed: ${error.message}`);
+    queueBlockedReason = `offline metadata load failed: ${error.message}`;
+    setStatus("error", queueBlockedReason);
     editor.disabled = true;
     reconnectButton.disabled = false;
     return false;
@@ -198,7 +213,8 @@ async function allocateActorCounter() {
 
 async function allocateActorCounters(count) {
   if (!queueMetadata || !queueStore) {
-    setStatus("error", "offline metadata is not initialized");
+    queueBlockedReason = "offline metadata is not initialized";
+    setStatus("error", queueBlockedReason);
     return null;
   }
   const startCounter = queueMetadata.next_actor_counter;
@@ -208,6 +224,8 @@ async function allocateActorCounters(count) {
   };
   queueMetadata = await queueStore.saveMetadata(queueMetadata);
   window.syncraftQueueMetadata = queueMetadata;
+  queueBlockedReason = "";
+  setStatus(statusNode.textContent || "live", errorNode.textContent === "none" ? "" : errorNode.textContent);
   return startCounter;
 }
 
@@ -224,11 +242,19 @@ async function updateMetadataFromState(message) {
     last_operation_id: message.last_operation_id || null,
   });
   window.syncraftQueueMetadata = queueMetadata;
+  setStatus(message.connection_state || "live", message.last_error || "");
 }
 
 function setStatus(state, errorText) {
-  statusNode.textContent = state;
-  statusNode.className = state === "error" ? "status-error" : state === "live" ? "status-live" : "";
+  const surface = deriveQueueSurfaceState({
+    connectionState: state,
+    pendingQueueCount: queueMetadata?.pending_queue_count ?? pendingQueueRecords.length,
+    blockedReason: queueBlockedReason,
+    reconnectingWithQueue,
+  });
+  statusNode.textContent = surface.state;
+  statusNode.className = `status-${surface.state}`;
+  queueSummaryNode.textContent = surface.queueSummary;
   errorNode.textContent = errorText || "none";
 }
 
