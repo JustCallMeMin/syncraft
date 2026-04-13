@@ -152,6 +152,39 @@ func TestDuplicateRemoteBroadcastIsHarmless(t *testing.T) {
 	}
 }
 
+func TestInsertTextAtWithCounterUpdatesNextActorCounter(t *testing.T) {
+	session := newTestSession(t)
+
+	ops, err := session.InsertTextAtWithCounter(0, "ab", 7)
+	if err != nil {
+		t.Fatalf("InsertTextAtWithCounter() error = %v, want nil", err)
+	}
+	if ops[0].ActorCounter != 7 || ops[1].ActorCounter != 8 {
+		t.Fatalf("actor counters = (%d, %d), want (7, 8)", ops[0].ActorCounter, ops[1].ActorCounter)
+	}
+	if got := session.ViewMetadata().NextActorCounter; got != 9 {
+		t.Fatalf("NextActorCounter = %d, want 9", got)
+	}
+}
+
+func TestDeleteAtWithCounterUsesExplicitCounter(t *testing.T) {
+	session := newTestSession(t)
+	if _, err := session.InsertTextAt(0, "a"); err != nil {
+		t.Fatalf("InsertTextAt() error = %v, want nil", err)
+	}
+
+	op, err := session.DeleteAtWithCounter(0, 11)
+	if err != nil {
+		t.Fatalf("DeleteAtWithCounter() error = %v, want nil", err)
+	}
+	if op.ActorCounter != 11 {
+		t.Fatalf("ActorCounter = %d, want 11", op.ActorCounter)
+	}
+	if got := session.ViewMetadata().NextActorCounter; got != 12 {
+		t.Fatalf("NextActorCounter = %d, want 12", got)
+	}
+}
+
 func newTestSession(t *testing.T) *Session {
 	t.Helper()
 	session, err := NewSession("doc_1", "actor_local")

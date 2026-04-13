@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JustCallMeMin/syncraft/internal/core/model"
 	"github.com/gorilla/websocket"
 )
 
@@ -158,6 +159,159 @@ func TestBrowserShellRejectsCrossOriginWebsocketUpgrade(t *testing.T) {
 	}
 }
 
+func TestBrowserShellUsesPersistedNextActorCounterFromInit(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+
+	client := mustDial(t, httpServer.URL)
+	defer client.Close()
+	mustSend(t, client, browserCommand{
+		Type:             "init",
+		ActorID:          "actor_a",
+		DocumentID:       "demo-doc",
+		NextActorCounter: 10,
+	})
+	_ = mustReadState(t, client)
+
+	mustSend(t, client, browserCommand{
+		Type:              "insert_text",
+		Index:             0,
+		Value:             "a",
+		ActorCounterStart: 10,
+	})
+	state := mustReadStateUntilText(t, client, "a")
+	if state.NextActorCounter != 11 {
+		t.Fatalf("NextActorCounter = %d, want 11", state.NextActorCounter)
+	}
+}
+
+func TestBrowserShellAcceptsCanonicalSubmitOperationReplay(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+
+	client := mustDial(t, httpServer.URL)
+	defer client.Close()
+	mustSend(t, client, browserCommand{
+		Type:       "init",
+		ActorID:    "actor_a",
+		DocumentID: "demo-doc",
+	})
+	_ = mustReadState(t, client)
+
+	mustSend(t, client, browserCommand{
+		Type: "submit_operation",
+		Operation: &browserOperation{
+			DocumentID:   "demo-doc",
+			OperationID:  "op_actor_a_1",
+			ActorID:      "actor_a",
+			ActorCounter: 1,
+			Type:         "insert",
+			InsertPayload: &browserInsertPayload{
+				ElementID: "elem_actor_a_1",
+				Value:     "a",
+			},
+		},
+	})
+	state := mustReadStateUntilText(t, client, "a")
+	if len(state.VisibleElements) != 1 {
+		t.Fatalf("len(VisibleElements) = %d, want 1", len(state.VisibleElements))
+	}
+	if state.VisibleElements[0].ID != "elem_actor_a_1" {
+		t.Fatalf("VisibleElements[0].ID = %q, want %q", state.VisibleElements[0].ID, "elem_actor_a_1")
+	}
+}
+
+func TestBrowserShellCanonicalSubmitOperationAdvancesActorCounterAcrossSequentialInputs(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+
+	client := mustDial(t, httpServer.URL)
+	defer client.Close()
+	mustSend(t, client, browserCommand{
+		Type:       "init",
+		ActorID:    "actor_a",
+		DocumentID: "demo-doc",
+	})
+	_ = mustReadState(t, client)
+
+	mustSend(t, client, browserCommand{
+		Type: "submit_operation",
+		Operation: &browserOperation{
+			DocumentID:   "demo-doc",
+			OperationID:  "op_actor_a_1",
+			ActorID:      "actor_a",
+			ActorCounter: 1,
+			Type:         "insert",
+			InsertPayload: &browserInsertPayload{
+				ElementID: "elem_actor_a_1",
+				Value:     "â",
+			},
+		},
+	})
+	state := mustReadStateUntilText(t, client, "â")
+	if state.NextActorCounter != 2 {
+		t.Fatalf("NextActorCounter after first canonical submit = %d, want 2", state.NextActorCounter)
+	}
+
+	mustSend(t, client, browserCommand{
+		Type: "submit_operation",
+		Operation: &browserOperation{
+			DocumentID:   "demo-doc",
+			OperationID:  "op_actor_a_2",
+			ActorID:      "actor_a",
+			ActorCounter: 2,
+			Type:         "insert",
+			InsertPayload: &browserInsertPayload{
+				ElementID:     "elem_actor_a_2",
+				Value:         "b",
+				LeftOriginID:  ptrElementID("elem_actor_a_1"),
+				RightOriginID: nil,
+			},
+		},
+	})
+	state = mustReadStateUntilText(t, client, "âb")
+	if state.NextActorCounter != 3 {
+		t.Fatalf("NextActorCounter after second canonical submit = %d, want 3", state.NextActorCounter)
+	}
+}
+
+func TestBrowserShellServesFavicon(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("StatusCode = %d, want %d", response.Code, http.StatusOK)
+	}
+	if contentType := response.Header().Get("Content-Type"); contentType != "image/svg+xml" {
+		t.Fatalf("Content-Type = %q, want %q", contentType, "image/svg+xml")
+	}
+	if body := response.Body.String(); !strings.Contains(body, "<svg") {
+		t.Fatalf("favicon body = %q, want embedded svg payload", body)
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	server, err := NewServer(t.TempDir())
@@ -221,4 +375,8 @@ func mustReadStateUntilText(t *testing.T, conn *websocket.Conn, want string) bro
 	}
 	t.Fatalf("did not observe text %q before timeout", want)
 	return browserStateMessage{}
+}
+
+func ptrElementID(value model.ElementID) *model.ElementID {
+	return &value
 }

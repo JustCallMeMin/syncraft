@@ -117,6 +117,15 @@ textarea {
   color: var(--accent);
 }
 
+.status-replaying_queue {
+  color: #8a6a00;
+}
+
+.status-offline_provisional {
+  color: #7c4d00;
+}
+
+.status-queue_blocked,
 .status-error {
   color: var(--error);
 }

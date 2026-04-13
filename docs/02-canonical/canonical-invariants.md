@@ -2,7 +2,8 @@
 
 ## Purpose
 
-This document defines the official invariants that Syncraft v1 must preserve.
+This document defines the official invariants that Syncraft v1 must preserve, plus the accepted
+replay constraints for the post-v1 offline queueing alpha.
 
 ## Official Invariants
 
@@ -15,12 +16,18 @@ This document defines the official invariants that Syncraft v1 must preserve.
 - duplicate delivery does not alter final visible state
 - out-of-order delivery does not alter final visible state
 - restart recovery reconstructs the same logical document state from persisted data
+- queued offline operations, once replayed after reconnect, must converge to the same visible text
+  as the equivalent continuously online operation set
+- duplicate replay of already accepted queued operations must not alter final visible state
 
 ## Interpretation Rules
 
 - server receive order is not merge truth
 - deterministic tie-breaking must come from CRDT semantics
 - snapshots are derived state and cannot change semantic meaning
+- provisional offline local state must not be described or treated as accepted shared state before
+  replay succeeds
+- offline queue replay must happen after normal catch-up, not before
 
 ## Validation Rule
 
@@ -32,4 +39,5 @@ architectural change and record it explicitly.
 - [`canonical-domain-model.md`](./canonical-domain-model.md)
 - [`protocol-spec.md`](./protocol-spec.md)
 - [`../03-planning-and-validation/use-case-catalog.md`](../03-planning-and-validation/use-case-catalog.md)
+- [`../03-planning-and-validation/offline-queueing-alpha-adr.md`](../03-planning-and-validation/offline-queueing-alpha-adr.md)
 - [`../01-product/mvp-scope-release-criteria.md`](../01-product/mvp-scope-release-criteria.md)

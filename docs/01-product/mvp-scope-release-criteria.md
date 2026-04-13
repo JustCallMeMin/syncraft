@@ -180,3 +180,18 @@ These are reasonable future candidates once v1 is stable:
 - more ambitious offline workflows
 - broader permission models
 - UI and workflow expansion for non-technical audiences
+
+## Post-v1 Scope Note
+
+The next approved post-v1 run is a constrained offline queueing alpha.
+
+Its currently accepted boundary is:
+
+- browser-only
+- one local browser profile or device
+- canonical CRDT operation queueing
+- provisional local state until replay succeeds
+
+This note does not expand the v1 scope.
+It exists so product and planning docs do not accidentally describe the next run as broad
+offline-first support.
