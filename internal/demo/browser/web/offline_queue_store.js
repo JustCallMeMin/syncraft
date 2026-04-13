@@ -1,6 +1,7 @@
 const DB_NAME = "syncraft-offline-queue";
 const DB_VERSION = 1;
 const STORE_NAME = "queued_operations";
+const METADATA_STORE_NAME = "queue_metadata";
 const STATUS_PENDING = "pending";
 const STATUS_REPLAYED = "replayed";
 const STATUS_BLOCKED = "blocked";
@@ -35,7 +36,7 @@ export class OfflineQueueStore {
     validateIdentifier("document_id", documentID);
     validateIdentifier("actor_id", actorID);
     const db = await this.open();
-    return this.#runReadonly(db, (store, resolve, reject) => {
+    return this.#runReadonly(db, (transaction, store, resolve, reject) => {
       const request = store.index("document_actor_status").getAll([documentID, actorID, STATUS_PENDING]);
       request.onsuccess = () => {
         const records = (request.result || []).map(cloneRecord).sort(byActorCounterThenOperationID);
@@ -48,12 +49,43 @@ export class OfflineQueueStore {
   }
 
   /**
+   * loadMetadata returns persisted actor-counter and queue metadata for one document and actor pair.
+   */
+  async loadMetadata(documentID, actorID) {
+    validateIdentifier("document_id", documentID);
+    validateIdentifier("actor_id", actorID);
+    const db = await this.open();
+    return this.#runReadonly(db, (transaction, store, resolve, reject) => {
+      const metadataStore = transaction.objectStore(METADATA_STORE_NAME);
+      const request = metadataStore.get(buildMetadataKey(documentID, actorID));
+      request.onsuccess = () => {
+        resolve(request.result ? cloneRecord(request.result) : defaultMetadataRecord(documentID, actorID));
+      };
+      request.onerror = () => reject(normalizeRequestError("load queue metadata", request.error));
+    });
+  }
+
+  /**
+   * saveMetadata validates and persists browser-local actor-counter and queue metadata.
+   */
+  async saveMetadata(metadata) {
+    const normalized = normalizeMetadata(metadata);
+    const db = await this.open();
+    return this.#runReadwrite(db, (transaction, store, resolve, reject) => {
+      const metadataStore = transaction.objectStore(METADATA_STORE_NAME);
+      const request = metadataStore.put(normalized);
+      request.onsuccess = () => resolve(cloneRecord(normalized));
+      request.onerror = () => reject(normalizeRequestError("save queue metadata", request.error));
+    });
+  }
+
+  /**
    * append validates and persists one queued canonical operation record.
    */
   async append(record) {
     const normalized = normalizeRecord(record);
     const db = await this.open();
-    return this.#runReadwrite(db, (store, resolve, reject) => {
+    return this.#runReadwrite(db, (transaction, store, resolve, reject) => {
       const request = store.put(normalized);
       request.onsuccess = () => resolve(cloneRecord(normalized));
       request.onerror = () => reject(normalizeRequestError("append queued operation", request.error));
@@ -84,7 +116,7 @@ export class OfflineQueueStore {
     validateIdentifier("document_id", documentID);
     validateIdentifier("actor_id", actorID);
     const db = await this.open();
-    return this.#runReadwrite(db, (store, resolve, reject) => {
+    return this.#runReadwrite(db, (transaction, store, resolve, reject) => {
       const request = store.index("document_actor_status").openCursor([documentID, actorID, STATUS_REPLAYED]);
       let removed = 0;
       request.onsuccess = () => {
@@ -109,7 +141,7 @@ export class OfflineQueueStore {
     validateIdentifier("actor_id", actorID);
     validateIdentifier("operation_id", operationID);
     const db = await this.open();
-    return this.#runReadwrite(db, (store, resolve, reject) => {
+    return this.#runReadwrite(db, (transaction, store, resolve, reject) => {
       const key = buildRecordKey(documentID, actorID, operationID);
       const request = store.get(key);
       request.onsuccess = () => {
@@ -134,19 +166,19 @@ export class OfflineQueueStore {
 
   #runReadonly(db, executor) {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, "readonly");
+      const transaction = db.transaction([STORE_NAME, METADATA_STORE_NAME], "readonly");
       transaction.onabort = () => reject(normalizeTransactionError("queue readonly transaction", transaction.error));
       transaction.onerror = () => reject(normalizeTransactionError("queue readonly transaction", transaction.error));
-      executor(transaction.objectStore(STORE_NAME), resolve, reject);
+      executor(transaction, transaction.objectStore(STORE_NAME), resolve, reject);
     });
   }
 
   #runReadwrite(db, executor) {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, "readwrite");
+      const transaction = db.transaction([STORE_NAME, METADATA_STORE_NAME], "readwrite");
       transaction.onabort = () => reject(normalizeTransactionError("queue readwrite transaction", transaction.error));
       transaction.onerror = () => reject(normalizeTransactionError("queue readwrite transaction", transaction.error));
-      executor(transaction.objectStore(STORE_NAME), resolve, reject);
+      executor(transaction, transaction.objectStore(STORE_NAME), resolve, reject);
     });
   }
 
@@ -161,6 +193,7 @@ export class OfflineQueueStore {
         const store = db.createObjectStore(STORE_NAME, { keyPath: "record_key" });
         store.createIndex("document_actor_status", "document_actor_status", { unique: false });
         store.createIndex("document_actor", "document_actor", { unique: false });
+        db.createObjectStore(METADATA_STORE_NAME, { keyPath: "metadata_key" });
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(normalizeRequestError("open offline queue database", request.error));
@@ -229,6 +262,46 @@ function validateIdentifier(name, value) {
 
 function buildRecordKey(documentID, actorID, operationID) {
   return `${documentID}::${actorID}::${operationID}`;
+}
+
+function buildMetadataKey(documentID, actorID) {
+  return `${documentID}::${actorID}`;
+}
+
+function defaultMetadataRecord(documentID, actorID) {
+  return {
+    metadata_key: buildMetadataKey(documentID, actorID),
+    document_id: documentID,
+    actor_id: actorID,
+    next_actor_counter: 1,
+    pending_queue_count: 0,
+    last_snapshot_id: null,
+    last_operation_id: null,
+  };
+}
+
+function normalizeMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object") {
+    throw new Error("queue metadata must be an object");
+  }
+  const documentID = validateIdentifier("document_id", metadata.document_id);
+  const actorID = validateIdentifier("actor_id", metadata.actor_id);
+  if (!Number.isInteger(metadata.next_actor_counter) || metadata.next_actor_counter <= 0) {
+    throw new Error("next_actor_counter must be a positive integer");
+  }
+  const pendingQueueCount = metadata.pending_queue_count ?? 0;
+  if (!Number.isInteger(pendingQueueCount) || pendingQueueCount < 0) {
+    throw new Error("pending_queue_count must be a non-negative integer");
+  }
+  return {
+    metadata_key: buildMetadataKey(documentID, actorID),
+    document_id: documentID,
+    actor_id: actorID,
+    next_actor_counter: metadata.next_actor_counter,
+    pending_queue_count: pendingQueueCount,
+    last_snapshot_id: metadata.last_snapshot_id || null,
+    last_operation_id: metadata.last_operation_id || null,
+  };
 }
 
 function byActorCounterThenOperationID(left, right) {

@@ -40,6 +40,14 @@ type Session struct {
 	state       State
 }
 
+// Metadata captures restart-relevant browser-facing session metadata.
+type Metadata struct {
+	NextActorCounter   uint64
+	LastSnapshotID     *model.SnapshotID
+	LastOperationID    *model.OperationID
+	PendingQueueCount  int
+}
+
 // NewSession constructs one browser-facing plain-text editor session.
 func NewSession(documentID model.DocumentID, actorID model.ActorID) (*Session, error) {
 	replica, err := reconnect.NewReplica(documentID, actorID)
@@ -61,6 +69,26 @@ func NewSession(documentID model.DocumentID, actorID model.ActorID) (*Session, e
 // ViewState returns the current browser-facing editor state.
 func (s *Session) ViewState() State {
 	return s.state
+}
+
+// ViewMetadata returns restart-relevant metadata for browser persistence.
+func (s *Session) ViewMetadata() Metadata {
+	lastSnapshotID, lastOperationID := s.replica.StateReference()
+	return Metadata{
+		NextActorCounter:  s.nextCounter,
+		LastSnapshotID:    lastSnapshotID,
+		LastOperationID:   lastOperationID,
+		PendingQueueCount: 0,
+	}
+}
+
+// SetNextActorCounter overrides the next actor counter for restart continuity.
+func (s *Session) SetNextActorCounter(nextCounter uint64) error {
+	if nextCounter == 0 {
+		return fmt.Errorf("next actor counter must be greater than zero")
+	}
+	s.nextCounter = nextCounter
+	return nil
 }
 
 // HandleSubscribeAck updates the editor's connection state from subscription mode.
@@ -122,8 +150,17 @@ func (s *Session) ApplyRemoteBroadcast(msg protocol.BroadcastOperationMessage) e
 
 // InsertTextAt generates and optimistically applies one or more one-rune insert operations.
 func (s *Session) InsertTextAt(index int, value string) ([]model.Operation, error) {
+	return s.InsertTextAtWithCounter(index, value, s.nextCounter)
+}
+
+// InsertTextAtWithCounter generates and applies one or more insert operations from one explicit counter.
+func (s *Session) InsertTextAtWithCounter(index int, value string, startCounter uint64) ([]model.Operation, error) {
 	if value == "" {
 		return nil, nil
+	}
+	if err := s.SetNextActorCounter(startCounter); err != nil {
+		s.setError(err)
+		return nil, err
 	}
 	runes := []rune(value)
 	ops := make([]model.Operation, 0, len(runes))
@@ -147,13 +184,22 @@ func (s *Session) InsertTextAt(index int, value string) ([]model.Operation, erro
 
 // DeleteAt generates and optimistically applies one delete operation at one visible index.
 func (s *Session) DeleteAt(index int) (model.Operation, error) {
+	return s.DeleteAtWithCounter(index, s.nextCounter)
+}
+
+// DeleteAtWithCounter generates and applies one delete operation from one explicit actor counter.
+func (s *Session) DeleteAtWithCounter(index int, counter uint64) (model.Operation, error) {
+	if err := s.SetNextActorCounter(counter); err != nil {
+		s.setError(err)
+		return model.Operation{}, err
+	}
 	visible := s.visibleElements()
 	if index < 0 || index >= len(visible) {
 		err := fmt.Errorf("delete index %d is outside visible text bounds", index)
 		s.setError(err)
 		return model.Operation{}, err
 	}
-	counter := s.allocateCounter()
+	counter = s.allocateCounter()
 	op := model.Operation{
 		DocumentID:   s.documentID,
 		OperationID:  model.OperationID(fmt.Sprintf("op_%s_%d", s.actorID, counter)),

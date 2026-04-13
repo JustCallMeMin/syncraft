@@ -52,6 +52,26 @@ test("markBlocked preserves reason for corrupted queue handling", async () => {
   assert.equal(blocked.failure_reason, "payload checksum mismatch");
 });
 
+test("saveMetadata and loadMetadata persist actor counter continuity", async () => {
+  const store = new OfflineQueueStore(createFakeIndexedDB());
+  await store.open();
+
+  await store.saveMetadata({
+    document_id: "doc-a",
+    actor_id: "actor-a",
+    next_actor_counter: 14,
+    pending_queue_count: 2,
+    last_snapshot_id: "snap-1",
+    last_operation_id: "op-13",
+  });
+
+  const metadata = await store.loadMetadata("doc-a", "actor-a");
+  assert.equal(metadata.next_actor_counter, 14);
+  assert.equal(metadata.pending_queue_count, 2);
+  assert.equal(metadata.last_snapshot_id, "snap-1");
+  assert.equal(metadata.last_operation_id, "op-13");
+});
+
 test("append rejects malformed canonical records", async () => {
   const store = new OfflineQueueStore(createFakeIndexedDB());
   await store.open();
@@ -133,20 +153,20 @@ function createFakeDatabase() {
       stores.set(name, store);
       return store;
     },
-    transaction(name) {
-      const store = stores.get(name);
-      return createFakeTransaction(store);
+    transaction(names) {
+      const requested = Array.isArray(names) ? names : [names];
+      return createFakeTransaction(requested, stores);
     },
   };
 }
 
-function createFakeTransaction(store) {
+function createFakeTransaction(names, stores) {
   return {
     error: null,
     onabort: null,
     onerror: null,
-    objectStore() {
-      return store;
+    objectStore(name) {
+      return stores.get(name ?? names[0]);
     },
   };
 }

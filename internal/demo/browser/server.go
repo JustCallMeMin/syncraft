@@ -27,11 +27,14 @@ import (
 var webAssets embed.FS
 
 type browserCommand struct {
-	Type       string           `json:"type"`
-	ActorID    model.ActorID    `json:"actor_id,omitempty"`
-	DocumentID model.DocumentID `json:"document_id,omitempty"`
-	Index      int              `json:"index,omitempty"`
-	Value      string           `json:"value,omitempty"`
+	Type              string           `json:"type"`
+	ActorID           model.ActorID    `json:"actor_id,omitempty"`
+	DocumentID        model.DocumentID `json:"document_id,omitempty"`
+	Index             int              `json:"index,omitempty"`
+	Value             string           `json:"value,omitempty"`
+	NextActorCounter  uint64           `json:"next_actor_counter,omitempty"`
+	ActorCounterStart uint64           `json:"actor_counter_start,omitempty"`
+	ActorCounter      uint64           `json:"actor_counter,omitempty"`
 }
 
 type browserStateMessage struct {
@@ -41,6 +44,10 @@ type browserStateMessage struct {
 	Text            string                 `json:"text,omitempty"`
 	ConnectionState editor.ConnectionState `json:"connection_state,omitempty"`
 	LastError       string                 `json:"last_error,omitempty"`
+	NextActorCounter uint64                `json:"next_actor_counter,omitempty"`
+	LastSnapshotID   *model.SnapshotID     `json:"last_snapshot_id,omitempty"`
+	LastOperationID  *model.OperationID    `json:"last_operation_id,omitempty"`
+	PendingQueueCount int                  `json:"pending_queue_count,omitempty"`
 }
 
 type browserClient struct {
@@ -166,6 +173,11 @@ func (s *Server) handleInit(ctx context.Context, conn *websocket.Conn, command b
 	if err != nil {
 		return err
 	}
+	if command.NextActorCounter != 0 {
+		if err := session.SetNextActorCounter(command.NextActorCounter); err != nil {
+			return err
+		}
+	}
 
 	client := &browserClient{
 		sessionID:  s.nextSessionID(),
@@ -238,7 +250,11 @@ func (s *Server) handleInsert(ctx context.Context, conn *websocket.Conn, command
 	if client == nil {
 		return fmt.Errorf("browser session is not initialized")
 	}
-	ops, err := client.editor.InsertTextAt(command.Index, command.Value)
+	startCounter := command.ActorCounterStart
+	if startCounter == 0 {
+		startCounter = client.editor.ViewMetadata().NextActorCounter
+	}
+	ops, err := client.editor.InsertTextAtWithCounter(command.Index, command.Value, startCounter)
 	if err != nil {
 		return err
 	}
@@ -255,7 +271,11 @@ func (s *Server) handleDelete(ctx context.Context, conn *websocket.Conn, command
 	if client == nil {
 		return fmt.Errorf("browser session is not initialized")
 	}
-	op, err := client.editor.DeleteAt(command.Index)
+	counter := command.ActorCounter
+	if counter == 0 {
+		counter = client.editor.ViewMetadata().NextActorCounter
+	}
+	op, err := client.editor.DeleteAtWithCounter(command.Index, counter)
 	if err != nil {
 		return err
 	}
@@ -327,6 +347,7 @@ func (s *Server) applyCatchupEvents(client *browserClient, events []any) error {
 
 func (s *Server) writeState(client *browserClient) error {
 	state := client.editor.ViewState()
+	metadata := client.editor.ViewMetadata()
 	return s.writeJSON(client.conn, browserStateMessage{
 		Type:            "state",
 		ActorID:         client.actorID,
@@ -334,6 +355,10 @@ func (s *Server) writeState(client *browserClient) error {
 		Text:            state.Text,
 		ConnectionState: state.ConnectionState,
 		LastError:       state.LastError,
+		NextActorCounter: metadata.NextActorCounter,
+		LastSnapshotID:   metadata.LastSnapshotID,
+		LastOperationID:  metadata.LastOperationID,
+		PendingQueueCount: metadata.PendingQueueCount,
 	})
 }
 

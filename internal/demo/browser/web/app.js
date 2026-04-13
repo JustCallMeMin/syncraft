@@ -15,6 +15,7 @@ let reconnectTimer = null;
 let sessionIntent = null;
 let queueStore = null;
 let pendingQueueRecords = [];
+let queueMetadata = null;
 
 actorInput.value = actorInput.value || `actor-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -37,7 +38,7 @@ reconnectButton.addEventListener("click", async () => {
   await connect(sessionIntent);
 });
 
-editor.addEventListener("input", () => {
+editor.addEventListener("input", async () => {
   if (applyingRemoteState || !socket || socket.readyState !== WebSocket.OPEN) {
     return;
   }
@@ -51,17 +52,27 @@ editor.addEventListener("input", () => {
 
   const removedCount = diff.removed.length;
   for (let index = 0; index < removedCount; index += 1) {
+    const actorCounter = await allocateActorCounter();
+    if (actorCounter === null) {
+      return;
+    }
     socket.send(JSON.stringify({
       type: "delete_at",
       index: diff.start,
+      actor_counter: actorCounter,
     }));
   }
 
   if (diff.inserted.length > 0) {
+    const actorCounterStart = await allocateActorCounters(Array.from(diff.inserted).length);
+    if (actorCounterStart === null) {
+      return;
+    }
     socket.send(JSON.stringify({
       type: "insert_text",
       index: diff.start,
       value: diff.inserted,
+      actor_counter_start: actorCounterStart,
     }));
   }
 });
@@ -71,6 +82,9 @@ async function connect(intent) {
   window.clearTimeout(reconnectTimer);
 
   if (!(await loadPendingQueue(intent))) {
+    return;
+  }
+  if (!(await loadQueueMetadata(intent))) {
     return;
   }
 
@@ -89,6 +103,7 @@ async function connect(intent) {
       type: "init",
       actor_id: intent.actorID,
       document_id: intent.documentID,
+      next_actor_counter: queueMetadata?.next_actor_counter || 1,
     }));
   });
 
@@ -104,6 +119,9 @@ async function connect(intent) {
     setStatus(message.connection_state || "live", message.last_error || "");
     editor.disabled = message.connection_state === "error" || message.connection_state === "connecting";
     reconnectButton.disabled = false;
+    updateMetadataFromState(message).catch((error) => {
+      setStatus("error", `offline metadata save failed: ${error.message}`);
+    });
   });
 
   socket.addEventListener("close", () => {
@@ -154,6 +172,58 @@ async function loadPendingQueue(intent) {
     reconnectButton.disabled = false;
     return false;
   }
+}
+
+async function loadQueueMetadata(intent) {
+  if (!queueStore) {
+    return false;
+  }
+  try {
+    queueMetadata = await queueStore.loadMetadata(intent.documentID, intent.actorID);
+    queueMetadata.pending_queue_count = pendingQueueRecords.length;
+    queueMetadata = await queueStore.saveMetadata(queueMetadata);
+    window.syncraftQueueMetadata = queueMetadata;
+    return true;
+  } catch (error) {
+    setStatus("error", `offline metadata load failed: ${error.message}`);
+    editor.disabled = true;
+    reconnectButton.disabled = false;
+    return false;
+  }
+}
+
+async function allocateActorCounter() {
+  return allocateActorCounters(1);
+}
+
+async function allocateActorCounters(count) {
+  if (!queueMetadata || !queueStore) {
+    setStatus("error", "offline metadata is not initialized");
+    return null;
+  }
+  const startCounter = queueMetadata.next_actor_counter;
+  queueMetadata = {
+    ...queueMetadata,
+    next_actor_counter: startCounter + count,
+  };
+  queueMetadata = await queueStore.saveMetadata(queueMetadata);
+  window.syncraftQueueMetadata = queueMetadata;
+  return startCounter;
+}
+
+async function updateMetadataFromState(message) {
+  if (!queueStore || !queueMetadata || !sessionIntent) {
+    return;
+  }
+  queueMetadata = await queueStore.saveMetadata({
+    document_id: sessionIntent.documentID,
+    actor_id: sessionIntent.actorID,
+    next_actor_counter: message.next_actor_counter || queueMetadata.next_actor_counter || 1,
+    pending_queue_count: Array.isArray(window.syncraftPendingQueueRecords) ? window.syncraftPendingQueueRecords.length : pendingQueueRecords.length,
+    last_snapshot_id: message.last_snapshot_id || null,
+    last_operation_id: message.last_operation_id || null,
+  });
+  window.syncraftQueueMetadata = queueMetadata;
 }
 
 function setStatus(state, errorText) {

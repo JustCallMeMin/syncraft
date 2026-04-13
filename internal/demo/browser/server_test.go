@@ -158,6 +158,37 @@ func TestBrowserShellRejectsCrossOriginWebsocketUpgrade(t *testing.T) {
 	}
 }
 
+func TestBrowserShellUsesPersistedNextActorCounterFromInit(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+
+	client := mustDial(t, httpServer.URL)
+	defer client.Close()
+	mustSend(t, client, browserCommand{
+		Type:             "init",
+		ActorID:          "actor_a",
+		DocumentID:       "demo-doc",
+		NextActorCounter: 10,
+	})
+	_ = mustReadState(t, client)
+
+	mustSend(t, client, browserCommand{
+		Type:              "insert_text",
+		Index:             0,
+		Value:             "a",
+		ActorCounterStart: 10,
+	})
+	state := mustReadStateUntilText(t, client, "a")
+	if state.NextActorCounter != 11 {
+		t.Fatalf("NextActorCounter = %d, want 11", state.NextActorCounter)
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	server, err := NewServer(t.TempDir())
