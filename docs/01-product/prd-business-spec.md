@@ -127,6 +127,11 @@ The following are explicitly out of scope for Syncraft v1:
 - offline-first multi-device sync as a headline feature
 - attempting to match the feature breadth of Google Docs, Notion, or similar suites
 
+Post-v1 note:
+
+- offline queueing may be explored as a narrow browser-only alpha after v1, but that does not
+  change the current v1 non-goal boundary
+
 ## Key Product Assumptions
 
 - Plain text is sufficient for the first milestone.
@@ -178,6 +183,21 @@ form. The immediate value is not broad office productivity. The immediate value 
 - a trustworthy demonstration of collaborative editing correctness
 - a foundation for future product or research expansion
 - a technically defensible milestone for capstone, thesis, or prototype evaluation
+
+## Post-v1 Direction
+
+The next approved run after the v1 baseline is a narrow offline queueing alpha.
+
+That direction is intentionally limited:
+
+- browser-only
+- one local browser profile or device
+- provisional local offline state until replay succeeds
+- replay through the existing reconnect and `submit_operation` path
+
+This is not a broad offline-first product promise.
+It is a constrained post-v1 experiment that must preserve the existing convergence and replay
+story.
 
 ## Open Questions
 
