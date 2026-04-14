@@ -23,6 +23,10 @@ Use this folder for execution sequencing and proof-oriented documents.
 - [`docs-core-web-ux-adr.md`](./docs-core-web-ux-adr.md)
   Accepted scope boundary for document title metadata, save-state chrome, and ephemeral
   presence in the web UX upgrade.
+- [`docs-pro-web-ux-run-plan.md`](./docs-pro-web-ux-run-plan.md)
+  Approved next-run plan for the first post-MVP docs-pro collaboration tranche.
+- [`docs-pro-web-ux-adr.md`](./docs-pro-web-ux-adr.md)
+  Accepted scope boundary for outline, comments-lite, checkpoints, and richer activity UX.
 - [`offline-queueing-alpha-adr.md`](./offline-queueing-alpha-adr.md)
   Accepted decision for the post-v1 offline queueing alpha scope and durability boundary.
 - [`use-cases/`](./use-cases/)

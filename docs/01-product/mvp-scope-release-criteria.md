@@ -129,6 +129,11 @@ The shipped browser surface is intentionally narrow:
 This is sufficient for v1 release evidence if the correctness and recovery gates are met.
 It should not be described as a broad end-user editing product yet.
 
+The next approved post-v1 tranche is `Docs Pro Web UX`. That work is explicitly beyond MVP
+and must not be backported into the v1 release criteria. It may add outline, comments-lite,
+checkpoints, and richer collaborator activity, but those remain post-v1 product expansion
+and not retroactive MVP requirements.
+
 ## Release Blockers
 
 The MVP must not be declared complete if any of the following remain true:

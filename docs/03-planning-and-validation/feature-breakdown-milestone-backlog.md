@@ -353,8 +353,50 @@ visualization.
 - browser regressions cover multi-tab editing, title propagation, reconnect, offline queue
   replay, presence expiry, and blocked queue diagnostics
 
+## Milestone 12: Docs Pro Web UX
+
+### Goal
+
+Move the browser shell beyond MVP into a daily-use plain-text collaboration surface with
+outline navigation, comments-lite, checkpoints, and richer collaborator activity UX.
+
+### Tasks
+
+- `@agent-founding-engine`: Approve Docs Pro web UX scope and ADR
+- `@agent-product-docs`: Update PRD, MVP transition language, and demo guidance for the
+  Docs Pro tranche
+- `@agent-core-engine`: Update canonical protocol and invariants for comments-lite and
+  checkpoint metadata
+- `@agent-client`: Implement browser-local outline model and active-section navigation
+- `@agent-backend`: Implement comments-lite metadata persistence and bootstrap
+- `@agent-client`: Implement comments rail and anchored comment markers
+- `@agent-backend`: Implement checkpoint metadata flow and bootstrap
+- `@agent-client`: Implement checkpoint list UI and richer activity chrome
+- `@agent-qa`: Deepen browser regression matrix for outline, comments, checkpoints, and
+  accessibility
+- `@agent-reviewer-security`: Review Docs Pro UX boundaries, redaction policy, and metadata
+  separation
+
+### Dependencies
+
+- Milestone 11 complete and pushed for review
+- the Docs Pro decision is accepted in
+  [`docs-pro-web-ux-adr.md`](./docs-pro-web-ux-adr.md)
+- canonical protocol and product wording are updated before comments or checkpoint
+  implementation begins
+
+### Exit Criteria
+
+- outline navigation is live and stable on real documents
+- comments-lite converges across tabs and survives refresh or restart
+- checkpoints are visible, bootstrapped, and separate from CRDT truth
+- richer collaborator activity does not weaken convergence, replay, or queue boundaries
+- browser coverage includes accessibility and viewport-state checks in addition to
+  functional collaboration flows
+
 ## Immediate Next Tasks
 
-The offline queueing alpha and observability UX tranches are now merged into `main`.
-The next approved run is the docs-core web UX tranche documented in
-[`docs-core-web-ux-run-plan.md`](./docs-core-web-ux-run-plan.md).
+The docs-core web UX tranche has now been pushed on
+`codex/post-v1-docs-core-web-ux` for review and integration.
+The next approved run is the Docs Pro web UX tranche documented in
+[`docs-pro-web-ux-run-plan.md`](./docs-pro-web-ux-run-plan.md).

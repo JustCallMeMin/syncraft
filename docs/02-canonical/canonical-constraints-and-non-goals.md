@@ -36,6 +36,10 @@ The currently accepted post-v1 allowances are:
   - title metadata separate from CRDT text
   - save and sync chrome
   - ephemeral collaborator presence, caret, and basic selection
+- docs-pro web UX planning with:
+  - browser-local outline derived from plain-text headings
+  - comments-lite and checkpoints as metadata side channels
+  - richer collaborator activity UX that remains ephemeral
 
 These allowances do not weaken the canonical constraints above.
 

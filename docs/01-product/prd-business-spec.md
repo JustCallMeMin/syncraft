@@ -20,6 +20,11 @@ suites. It is trying to prove that teams can collaborate on the same plain-text 
 with strong convergence guarantees, deterministic replay, and reliable recovery after
 disconnects or server restarts.
 
+The current post-v1 direction is broader than the original MVP shell but still disciplined.
+The approved next tranche is `Docs Pro Web UX`, which adds outline navigation,
+comments-lite, checkpoints, and richer collaborator activity without changing the plain-text
+document model or turning Syncraft into a full rich-text suite.
+
 ## Problem Statement
 
 Most collaborative editors optimize for a polished editing experience, but the underlying

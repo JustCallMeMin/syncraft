@@ -34,6 +34,12 @@ The shell now includes:
 - automatic reconnect retry after websocket drops
 - visible status and error reporting for operator-facing troubleshooting
 - browser-local offline queueing alpha behavior in the current `main` branch
+- the docs-core web UX branch with title metadata, collaborator strip, and remote
+  caret/selection overlays on `codex/post-v1-docs-core-web-ux`
+
+The next approved demo-facing expansion after this branch is `Docs Pro Web UX`, which will
+add outline navigation, comments-lite, checkpoints, and richer collaborator activity while
+keeping the editor plain-text.
 
 ## Primary Audience
 
