@@ -247,13 +247,6 @@ Turn the implementation into a repeatable v1 demo that satisfies MVP release cri
 - protocol spec
 - milestone backlog
 
-## Immediate Next Tasks
-
-The post-v1 offline queueing alpha is now merged into `main`.
-Its design gate, client tranche, QA validation, and reviewer-security sign-off are complete.
-The next approved run is the planning-first `Observability UX` tranche documented in
-[`observability-ux-run-plan.md`](./observability-ux-run-plan.md).
-
 ## Milestone 9: Offline Queueing Alpha
 
 ### Goal
@@ -316,3 +309,52 @@ expanding Syncraft into a dashboard-oriented product.
 - the browser demo exposes enough observability for operator-facing diagnosis without opening terminal logs
 - the panel remains collapsed by default and does not widen product scope
 - blocked queue, reconnect, and replay transitions are legible without exposing raw text payloads
+
+## Milestone 11: Docs-Core Web UX
+
+### Goal
+
+Upgrade the browser shell into a more practical Docs-like plain-text collaboration surface
+with title metadata, save-state chrome, collaborator presence, and remote caret or selection
+visualization.
+
+### Tasks
+
+- `@agent-founding-engine`: Approve docs-core web UX scope and ADR
+- `@agent-core-engine`: Update canonical protocol and invariants for title metadata and
+  presence semantics
+- `@agent-product-docs`: Update PRD, MVP scope, and demo guidance for the docs-core web UX
+  tranche
+- `@agent-backend`: Implement document title metadata persistence and state bootstrap
+- `@agent-backend`: Implement presence protocol, relay, and stale-session expiry
+- `@agent-client`: Redesign the browser shell into a docs-core layout with title chrome and
+  save-state UX
+- `@agent-client`: Implement collaborator strip, remote caret, and remote selection rendering
+- `@agent-qa`: Add unit, integration, Playwright, accessibility, and state-matrix coverage
+- `@agent-reviewer-security`: Review presence boundary, title metadata persistence, and
+  event-redaction policy
+
+### Dependencies
+
+- Milestone 10 complete and merged into `main`
+- the docs-core web UX decision is accepted in
+  [`docs-core-web-ux-adr.md`](./docs-core-web-ux-adr.md)
+- canonical protocol and product docs are updated before backend or client implementation
+  expands
+
+### Exit Criteria
+
+- document title is visible, editable, persisted, and propagated across connected clients
+- save-state UX distinguishes connecting, live, saving, saved, offline provisional,
+  replaying, and blocked states
+- collaborator presence strip and remote caret or selection rendering are available in the
+  browser shell
+- presence traffic remains ephemeral and does not alter CRDT convergence or replay semantics
+- browser regressions cover multi-tab editing, title propagation, reconnect, offline queue
+  replay, presence expiry, and blocked queue diagnostics
+
+## Immediate Next Tasks
+
+The offline queueing alpha and observability UX tranches are now merged into `main`.
+The next approved run is the docs-core web UX tranche documented in
+[`docs-core-web-ux-run-plan.md`](./docs-core-web-ux-run-plan.md).

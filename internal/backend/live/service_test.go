@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JustCallMeMin/syncraft/internal/backend/persistence"
 	"github.com/JustCallMeMin/syncraft/internal/backend/protocol"
@@ -320,6 +321,130 @@ func TestHandleSubmitLogsAcceptedAndRejectedActions(t *testing.T) {
 	}
 	if strings.Contains(logOutput, "operation_value") {
 		t.Fatalf("log output = %q, want no raw text payload values", logOutput)
+	}
+}
+
+func TestHandleUpdateTitlePersistsAndBroadcasts(t *testing.T) {
+	service := newService(t)
+	ctx := context.Background()
+
+	mustHello(t, ctx, service, "sess_1", "actor_a")
+	mustHello(t, ctx, service, "sess_2", "actor_b")
+	mustSubscribe(t, ctx, service, "sess_1", "doc_1")
+	mustSubscribe(t, ctx, service, "sess_2", "doc_1")
+
+	changes, errMsg, err := service.HandleUpdateTitle(ctx, protocol.UpdateDocumentTitleMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeUpdateTitle,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_title",
+		},
+		Title: "Planning Notes",
+	})
+	if err != nil || errMsg != nil {
+		t.Fatalf("HandleUpdateTitle() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("change count = %d, want 2", len(changes))
+	}
+
+	record, err := service.DocumentMetadata(ctx, "doc_1")
+	if err != nil {
+		t.Fatalf("DocumentMetadata() error = %v, want nil", err)
+	}
+	if record.Title != "Planning Notes" {
+		t.Fatalf("Title = %q, want %q", record.Title, "Planning Notes")
+	}
+	if record.LastEditorActorID != "actor_a" {
+		t.Fatalf("LastEditorActorID = %q, want %q", record.LastEditorActorID, "actor_a")
+	}
+}
+
+func TestHandlePresenceUpdateBroadcastsAndExpires(t *testing.T) {
+	service := newService(t)
+	service.SetPresenceTTL(20 * time.Millisecond)
+	ctx := context.Background()
+
+	mustHello(t, ctx, service, "sess_1", "actor_a")
+	mustHello(t, ctx, service, "sess_2", "actor_b")
+	mustSubscribe(t, ctx, service, "sess_1", "doc_1")
+	mustSubscribe(t, ctx, service, "sess_2", "doc_1")
+
+	updates, errMsg, err := service.HandlePresenceUpdate(ctx, protocol.PresenceUpdateMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypePresenceUpdate,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_presence",
+		},
+		Presence: protocol.PresencePayload{
+			ActorID:    "actor_a",
+			SessionID:  "sess_1",
+			DisplayName: "A",
+			CursorAnchor: protocol.PresencePosition{FallbackIndex: 0},
+			CursorFocus:  protocol.PresencePosition{FallbackIndex: 0},
+			IsCollapsed: true,
+			LastSeenAt:  time.Now().UTC(),
+		},
+	})
+	if err != nil || errMsg != nil {
+		t.Fatalf("HandlePresenceUpdate() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+	if len(updates) != 2 {
+		t.Fatalf("update count = %d, want 2", len(updates))
+	}
+	if snapshot := service.PresenceSnapshot("doc_1"); len(snapshot) != 1 {
+		t.Fatalf("PresenceSnapshot len = %d, want 1", len(snapshot))
+	}
+
+	time.Sleep(30 * time.Millisecond)
+	if snapshot := service.PresenceSnapshot("doc_1"); len(snapshot) != 0 {
+		t.Fatalf("PresenceSnapshot len after expiry = %d, want 0", len(snapshot))
+	}
+}
+
+func TestDisconnectSessionRemovesPresence(t *testing.T) {
+	service := newService(t)
+	ctx := context.Background()
+
+	mustHello(t, ctx, service, "sess_1", "actor_a")
+	mustHello(t, ctx, service, "sess_2", "actor_b")
+	mustSubscribe(t, ctx, service, "sess_1", "doc_1")
+	mustSubscribe(t, ctx, service, "sess_2", "doc_1")
+
+	_, errMsg, err := service.HandlePresenceUpdate(ctx, protocol.PresenceUpdateMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypePresenceUpdate,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_presence",
+		},
+		Presence: protocol.PresencePayload{
+			ActorID:    "actor_a",
+			SessionID:  "sess_1",
+			CursorAnchor: protocol.PresencePosition{FallbackIndex: 0},
+			CursorFocus:  protocol.PresencePosition{FallbackIndex: 0},
+			IsCollapsed: true,
+			LastSeenAt:  time.Now().UTC(),
+		},
+	})
+	if err != nil || errMsg != nil {
+		t.Fatalf("HandlePresenceUpdate() err = %v, errMsg = %+v, want nil", err, errMsg)
+	}
+
+	removals := service.DisconnectSession("sess_1")
+	if len(removals) != 1 {
+		t.Fatalf("DisconnectSession removal count = %d, want 1", len(removals))
+	}
+	if !removals[0].Removed {
+		t.Fatal("DisconnectSession removal flag = false, want true")
+	}
+	if snapshot := service.PresenceSnapshot("doc_1"); len(snapshot) != 0 {
+		t.Fatalf("PresenceSnapshot len after disconnect = %d, want 0", len(snapshot))
 	}
 }
 

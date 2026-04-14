@@ -19,6 +19,8 @@ import (
 var (
 	// ErrSnapshotNotFound reports that no snapshot is available for a document.
 	ErrSnapshotNotFound = errors.New("snapshot not found")
+	// ErrDocumentMetadataNotFound reports that no metadata record is available for a document.
+	ErrDocumentMetadataNotFound = errors.New("document metadata not found")
 )
 
 // SnapshotRecord captures one persisted snapshot plus its replay watermark.
@@ -28,6 +30,14 @@ type SnapshotRecord struct {
 	LastIncludedOperationID model.OperationID `json:"last_included_operation_id"`
 	CreatedAt               time.Time         `json:"created_at"`
 	State                   engine.Snapshot   `json:"state"`
+}
+
+// DocumentMetadataRecord stores lightweight document chrome metadata outside the CRDT log.
+type DocumentMetadataRecord struct {
+	DocumentID        model.DocumentID `json:"document_id"`
+	Title             string           `json:"title"`
+	UpdatedAt         time.Time        `json:"updated_at"`
+	LastEditorActorID model.ActorID    `json:"last_editor_actor_id,omitempty"`
 }
 
 // FileStore persists operation logs and snapshots on the local filesystem.
@@ -142,6 +152,71 @@ func (s *FileStore) SaveSnapshot(ctx context.Context, snapshot SnapshotRecord) e
 		"last_included_operation_id", snapshot.LastIncludedOperationID,
 	)
 	return nil
+}
+
+// SaveDocumentMetadata stores lightweight document metadata separately from CRDT persistence.
+func (s *FileStore) SaveDocumentMetadata(ctx context.Context, metadata DocumentMetadataRecord) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if metadata.DocumentID == "" {
+		return model.ErrEmptyDocumentID
+	}
+	if metadata.Title == "" {
+		return fmt.Errorf("document title must not be empty")
+	}
+	if metadata.UpdatedAt.IsZero() {
+		metadata.UpdatedAt = time.Now().UTC()
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	docDir := s.documentDir(metadata.DocumentID)
+	if err := os.MkdirAll(docDir, 0o755); err != nil {
+		return fmt.Errorf("create document persistence directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal document metadata: %w", err)
+	}
+	if err := os.WriteFile(s.metadataPath(metadata.DocumentID), data, 0o644); err != nil {
+		return fmt.Errorf("write document metadata: %w", err)
+	}
+	s.logger.InfoContext(ctx, "save document metadata",
+		"document_id", metadata.DocumentID,
+		"title_length", len([]rune(metadata.Title)),
+		"last_editor_actor_id", metadata.LastEditorActorID,
+	)
+	return nil
+}
+
+// LoadDocumentMetadata retrieves lightweight document metadata for one document.
+func (s *FileStore) LoadDocumentMetadata(ctx context.Context, documentID model.DocumentID) (*DocumentMetadataRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if documentID == "" {
+		return nil, model.ErrEmptyDocumentID
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := os.ReadFile(s.metadataPath(documentID))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrDocumentMetadataNotFound
+		}
+		return nil, fmt.Errorf("read document metadata: %w", err)
+	}
+
+	var metadata DocumentMetadataRecord
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return nil, fmt.Errorf("decode document metadata: %w", err)
+	}
+	return &metadata, nil
 }
 
 // LoadLatestSnapshot retrieves the latest stored snapshot for one document.
@@ -286,4 +361,8 @@ func (s *FileStore) latestSnapshotPath(documentID model.DocumentID) string {
 
 func (s *FileStore) snapshotPath(documentID model.DocumentID, snapshotID model.SnapshotID) string {
 	return filepath.Join(s.documentDir(documentID), "snapshots", fmt.Sprintf("%s.json", snapshotID))
+}
+
+func (s *FileStore) metadataPath(documentID model.DocumentID) string {
+	return filepath.Join(s.documentDir(documentID), "metadata.json")
 }

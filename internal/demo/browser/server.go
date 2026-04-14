@@ -30,11 +30,13 @@ type browserCommand struct {
 	Type              string            `json:"type"`
 	ActorID           model.ActorID     `json:"actor_id,omitempty"`
 	DocumentID        model.DocumentID  `json:"document_id,omitempty"`
+	Title             string            `json:"title,omitempty"`
 	Index             int               `json:"index,omitempty"`
 	Value             string            `json:"value,omitempty"`
 	NextActorCounter  uint64            `json:"next_actor_counter,omitempty"`
 	ActorCounterStart uint64            `json:"actor_counter_start,omitempty"`
 	ActorCounter      uint64            `json:"actor_counter,omitempty"`
+	Presence          *browserPresence  `json:"presence,omitempty"`
 	Operation         *browserOperation `json:"operation,omitempty"`
 }
 
@@ -42,6 +44,7 @@ type browserStateMessage struct {
 	Type              string                  `json:"type"`
 	ActorID           model.ActorID           `json:"actor_id,omitempty"`
 	DocumentID        model.DocumentID        `json:"document_id,omitempty"`
+	Title             string                  `json:"title,omitempty"`
 	Text              string                  `json:"text,omitempty"`
 	ConnectionState   editor.ConnectionState  `json:"connection_state,omitempty"`
 	LastError         string                  `json:"last_error,omitempty"`
@@ -50,11 +53,38 @@ type browserStateMessage struct {
 	LastOperationID   *model.OperationID      `json:"last_operation_id,omitempty"`
 	PendingQueueCount int                     `json:"pending_queue_count,omitempty"`
 	VisibleElements   []browserVisibleElement `json:"visible_elements,omitempty"`
+	Collaborators     []browserCollaborator   `json:"collaborators,omitempty"`
 }
 
 type browserVisibleElement struct {
 	ID    model.ElementID `json:"id"`
 	Value string          `json:"value"`
+}
+
+type browserPresence struct {
+	DisplayName        string                  `json:"display_name,omitempty"`
+	CursorAnchor       *browserPresenceAnchor  `json:"cursor_anchor,omitempty"`
+	CursorFocus        *browserPresenceAnchor  `json:"cursor_focus,omitempty"`
+	SelectionDirection string                  `json:"selection_direction,omitempty"`
+	IsCollapsed        bool                    `json:"is_collapsed"`
+}
+
+type browserPresenceAnchor struct {
+	ElementID     model.ElementID `json:"element_id,omitempty"`
+	Offset        int             `json:"offset,omitempty"`
+	FallbackIndex int             `json:"fallback_index,omitempty"`
+}
+
+type browserCollaborator struct {
+	ActorID            model.ActorID          `json:"actor_id"`
+	SessionID          string                 `json:"session_id"`
+	DisplayName        string                 `json:"display_name,omitempty"`
+	IsSelf             bool                   `json:"is_self,omitempty"`
+	CursorAnchor       browserPresenceAnchor  `json:"cursor_anchor"`
+	CursorFocus        browserPresenceAnchor  `json:"cursor_focus"`
+	SelectionDirection string                 `json:"selection_direction,omitempty"`
+	IsCollapsed        bool                   `json:"is_collapsed"`
+	LastSeenAt         time.Time              `json:"last_seen_at"`
 }
 
 type browserOperation struct {
@@ -190,6 +220,10 @@ func (s *Server) handleCommand(ctx context.Context, conn *websocket.Conn, comman
 	switch command.Type {
 	case "init":
 		return s.handleInit(ctx, conn, command)
+	case "update_title":
+		return s.handleUpdateTitle(ctx, conn, command)
+	case "presence_update":
+		return s.handlePresenceUpdate(ctx, conn, command)
 	case "insert_text":
 		return s.handleInsert(ctx, conn, command)
 	case "delete_at":
@@ -283,6 +317,58 @@ func (s *Server) handleInit(ctx context.Context, conn *websocket.Conn, command b
 		}
 	}
 	return s.writeState(client)
+}
+
+func (s *Server) handleUpdateTitle(ctx context.Context, conn *websocket.Conn, command browserCommand) error {
+	client := s.lookupClient(conn)
+	if client == nil {
+		return fmt.Errorf("browser session is not initialized")
+	}
+	updates, errMsg, err := s.service.HandleUpdateTitle(ctx, protocol.UpdateDocumentTitleMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeUpdateTitle,
+			DocumentID:      client.documentID,
+			SessionID:       client.sessionID,
+			MessageID:       clientMessageID("title"),
+		},
+		Title: strings.TrimSpace(command.Title),
+	})
+	if err != nil {
+		return err
+	}
+	if errMsg != nil {
+		return fmt.Errorf("%s", errMsg.ErrorMessage)
+	}
+	return s.applyTitleUpdates(client.documentID, updates)
+}
+
+func (s *Server) handlePresenceUpdate(ctx context.Context, conn *websocket.Conn, command browserCommand) error {
+	client := s.lookupClient(conn)
+	if client == nil {
+		return fmt.Errorf("browser session is not initialized")
+	}
+	if command.Presence == nil {
+		return fmt.Errorf("presence_update requires one presence payload")
+	}
+	payload := command.Presence.toProtocol(client.actorID, client.sessionID)
+	updates, errMsg, err := s.service.HandlePresenceUpdate(ctx, protocol.PresenceUpdateMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypePresenceUpdate,
+			DocumentID:      client.documentID,
+			SessionID:       client.sessionID,
+			MessageID:       clientMessageID("presence"),
+		},
+		Presence: payload,
+	})
+	if err != nil {
+		return err
+	}
+	if errMsg != nil {
+		return fmt.Errorf("%s", errMsg.ErrorMessage)
+	}
+	return s.applyPresenceUpdates(client.documentID, updates)
 }
 
 func (s *Server) handleInsert(ctx context.Context, conn *websocket.Conn, command browserCommand) error {
@@ -387,6 +473,32 @@ func (s *Server) applyBroadcastToDocumentClients(documentID model.DocumentID, br
 	return nil
 }
 
+func (s *Server) applyTitleUpdates(documentID model.DocumentID, updates []protocol.DocumentTitleChangedMessage) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	clients := s.documentClients(documentID)
+	for _, client := range clients {
+		if err := s.writeState(client); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) applyPresenceUpdates(documentID model.DocumentID, updates []protocol.PresenceBroadcastMessage) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	clients := s.documentClients(documentID)
+	for _, client := range clients {
+		if err := s.writeState(client); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Server) applyCatchupEvents(client *browserClient, events []any) error {
 	for _, event := range events {
 		switch typed := event.(type) {
@@ -413,6 +525,11 @@ func (s *Server) writeState(client *browserClient) error {
 	state := client.editor.ViewState()
 	metadata := client.editor.ViewMetadata()
 	visibleElements := client.editor.ViewVisibleElements()
+	documentMetadata, err := s.service.DocumentMetadata(context.Background(), client.documentID)
+	if err != nil {
+		return err
+	}
+	presenceSnapshot := s.service.PresenceSnapshot(client.documentID)
 	browserVisible := make([]browserVisibleElement, 0, len(visibleElements))
 	for _, elem := range visibleElements {
 		browserVisible = append(browserVisible, browserVisibleElement{
@@ -420,10 +537,25 @@ func (s *Server) writeState(client *browserClient) error {
 			Value: elem.Value,
 		})
 	}
+	collaborators := make([]browserCollaborator, 0, len(presenceSnapshot))
+	for _, collaborator := range presenceSnapshot {
+		collaborators = append(collaborators, browserCollaborator{
+			ActorID:            collaborator.ActorID,
+			SessionID:          collaborator.SessionID,
+			DisplayName:        collaborator.DisplayName,
+			IsSelf:             collaborator.SessionID == client.sessionID,
+			CursorAnchor:       browserPresenceAnchorFromProtocol(collaborator.CursorAnchor),
+			CursorFocus:        browserPresenceAnchorFromProtocol(collaborator.CursorFocus),
+			SelectionDirection: collaborator.SelectionDirection,
+			IsCollapsed:        collaborator.IsCollapsed,
+			LastSeenAt:         collaborator.LastSeenAt,
+		})
+	}
 	return s.writeJSON(client.conn, browserStateMessage{
 		Type:              "state",
 		ActorID:           client.actorID,
 		DocumentID:        client.documentID,
+		Title:             documentMetadata.Title,
 		Text:              state.Text,
 		ConnectionState:   state.ConnectionState,
 		LastError:         state.LastError,
@@ -432,6 +564,7 @@ func (s *Server) writeState(client *browserClient) error {
 		LastOperationID:   metadata.LastOperationID,
 		PendingQueueCount: metadata.PendingQueueCount,
 		VisibleElements:   browserVisible,
+		Collaborators:     collaborators,
 	})
 }
 
@@ -466,9 +599,9 @@ func (s *Server) attachClient(conn *websocket.Conn, client *browserClient) {
 
 func (s *Server) detachClient(conn *websocket.Conn) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	client := s.clients[conn]
 	if client == nil {
+		s.mu.Unlock()
 		return
 	}
 	delete(s.clients, conn)
@@ -478,6 +611,10 @@ func (s *Server) detachClient(conn *websocket.Conn) {
 			delete(s.docs, client.documentID)
 		}
 	}
+	s.mu.Unlock()
+
+	updates := s.service.DisconnectSession(client.sessionID)
+	_ = s.applyPresenceUpdates(client.documentID, updates)
 }
 
 func (s *Server) lookupClient(conn *websocket.Conn) *browserClient {
@@ -506,6 +643,43 @@ func (s *Server) nextSessionID() string {
 
 func clientMessageID(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, time.Now().UTC().UnixNano())
+}
+
+func (p browserPresence) toProtocol(actorID model.ActorID, sessionID string) protocol.PresencePayload {
+	anchor := browserPresenceAnchor{}
+	if p.CursorAnchor != nil {
+		anchor = *p.CursorAnchor
+	}
+	focus := anchor
+	if p.CursorFocus != nil {
+		focus = *p.CursorFocus
+	}
+	return protocol.PresencePayload{
+		ActorID:            actorID,
+		SessionID:          sessionID,
+		DisplayName:        strings.TrimSpace(p.DisplayName),
+		CursorAnchor:       anchor.toProtocol(),
+		CursorFocus:        focus.toProtocol(),
+		SelectionDirection: strings.TrimSpace(p.SelectionDirection),
+		IsCollapsed:        p.IsCollapsed,
+		LastSeenAt:         time.Now().UTC(),
+	}
+}
+
+func (a browserPresenceAnchor) toProtocol() protocol.PresencePosition {
+	return protocol.PresencePosition{
+		ElementID:     a.ElementID,
+		Offset:        a.Offset,
+		FallbackIndex: a.FallbackIndex,
+	}
+}
+
+func browserPresenceAnchorFromProtocol(position protocol.PresencePosition) browserPresenceAnchor {
+	return browserPresenceAnchor{
+		ElementID:     position.ElementID,
+		Offset:        position.Offset,
+		FallbackIndex: position.FallbackIndex,
+	}
 }
 
 func (o browserOperation) toModelOperation() (model.Operation, error) {

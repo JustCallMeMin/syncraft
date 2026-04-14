@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/JustCallMeMin/syncraft/internal/core/model"
 )
@@ -77,6 +78,45 @@ func TestRequestCatchupValidate(t *testing.T) {
 		},
 	}
 
+	if err := msg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
+
+func TestUpdateDocumentTitleValidate(t *testing.T) {
+	msg := UpdateDocumentTitleMessage{
+		Envelope: Envelope{
+			ProtocolVersion: VersionV1,
+			MessageType:     MessageTypeUpdateTitle,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_1",
+		},
+		Title: "Shared Notes",
+	}
+	if err := msg.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v, want nil", err)
+	}
+}
+
+func TestPresenceUpdateValidate(t *testing.T) {
+	msg := PresenceUpdateMessage{
+		Envelope: Envelope{
+			ProtocolVersion: VersionV1,
+			MessageType:     MessageTypePresenceUpdate,
+			DocumentID:      "doc_1",
+			SessionID:       "sess_1",
+			MessageID:       "msg_1",
+		},
+		Presence: PresencePayload{
+			ActorID:     "actor_1",
+			SessionID:   "sess_1",
+			CursorAnchor: PresencePosition{FallbackIndex: 0},
+			CursorFocus:  PresencePosition{FallbackIndex: 0},
+			IsCollapsed: true,
+			LastSeenAt:  time.Now().UTC(),
+		},
+	}
 	if err := msg.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v, want nil", err)
 	}

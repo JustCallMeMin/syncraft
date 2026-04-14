@@ -23,6 +23,22 @@ This document states the official constraints and non-goals that limit Syncraft 
 - mobile-native clients
 - offline-first multi-device sync as a committed v1 feature
 
+## Post-v1 Tranche Allowances
+
+Post-v1 tranches may add product-surface behavior only when the change is recorded
+explicitly in product, planning, and canonical docs first.
+
+The currently accepted post-v1 allowances are:
+
+- browser-only offline queueing alpha within its documented durability boundary
+- minimal in-app observability UX debug panel
+- docs-core web UX with:
+  - title metadata separate from CRDT text
+  - save and sync chrome
+  - ephemeral collaborator presence, caret, and basic selection
+
+These allowances do not weaken the canonical constraints above.
+
 ## Governance Rule
 
 Any proposal that moves an item out of the non-goals list or weakens a canonical

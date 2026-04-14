@@ -3,53 +3,92 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Syncraft Demo Editor</title>
+    <title>Syncraft Docs-Core Web</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="layout">
-      <section class="panel">
-        <h1>Syncraft Demo Editor</h1>
-        <p class="subtitle">Minimal plain-text collaboration shell over the current v1 engine.</p>
-        <form id="connect-form" class="controls">
-          <label>
-            Actor Instance
-            <input id="actor-id" name="actor-id" value="" required />
-          </label>
-          <label>
-            Document
-            <input id="document-id" name="document-id" value="demo-doc" required />
-          </label>
-          <button type="submit">Connect</button>
-          <button id="reconnect-button" type="button">Reconnect</button>
-        </form>
-        <dl class="meta">
-          <div>
-            <dt>Status</dt>
-            <dd id="status">disconnected</dd>
+    <main class="docs-shell">
+      <header class="app-bar">
+        <div class="app-brand">
+          <p class="brand-kicker">Syncraft</p>
+          <h1>Docs-Core Collaboration</h1>
+        </div>
+        <div class="app-title-group">
+          <label class="visually-hidden" for="document-title">Title</label>
+          <input id="document-title" class="document-title-input" value="Untitled document" aria-label="Title" />
+          <div class="app-state-row">
+            <div id="save-state-chip" class="save-state-chip save-state-connecting" aria-live="polite">Connecting</div>
+            <div id="collaborator-strip" class="collaborator-strip" aria-label="Active collaborators">
+              <span class="collaborator-empty">No collaborators yet</span>
+            </div>
           </div>
-          <div>
-            <dt>Queue</dt>
-            <dd id="queue-summary">no queued local operations</dd>
-          </div>
-          <div>
-            <dt>Error</dt>
-            <dd id="error">none</dd>
-          </div>
-        </dl>
-        <button id="debug-panel-toggle" class="debug-toggle" type="button" aria-expanded="false" aria-controls="debug-panel">
+        </div>
+        <button id="debug-panel-toggle" class="debug-toggle topbar-button" type="button" aria-expanded="false" aria-controls="debug-panel">
           Show Debug Panel
         </button>
+      </header>
+
+      <section class="workspace-grid">
+        <aside class="utility-rail">
+          <section class="rail-card">
+            <p class="rail-label">Session</p>
+            <form id="connect-form" class="controls">
+              <label>
+                Actor Instance
+                <input id="actor-id" name="actor-id" value="" required />
+              </label>
+              <label>
+                Document
+                <input id="document-id" name="document-id" value="demo-doc" required />
+              </label>
+              <div class="button-row">
+                <button type="submit">Connect</button>
+                <button id="reconnect-button" type="button" class="button-secondary">Reconnect</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="rail-card">
+            <p class="rail-label">Status</p>
+            <dl class="meta">
+              <div>
+                <dt>Connection</dt>
+                <dd id="status">disconnected</dd>
+              </div>
+              <div>
+                <dt>Queue</dt>
+                <dd id="queue-summary">no queued local operations</dd>
+              </div>
+              <div>
+                <dt>Error</dt>
+                <dd id="error">none</dd>
+              </div>
+            </dl>
+          </section>
+        </aside>
+
+        <section class="editor-stage">
+          <div class="editor-stage-header">
+            <div>
+              <p class="editor-kicker">Shared Plain Text</p>
+              <h2>Focused writing surface with live collaboration diagnostics</h2>
+            </div>
+          </div>
+          <div class="editor-surface">
+            <label class="visually-hidden" for="editor">Shared Plain Text</label>
+            <div class="editor-stack">
+              <div id="presence-layer" class="presence-layer" aria-hidden="true"></div>
+              <textarea id="editor" spellcheck="false" placeholder="Connect two browser tabs, rename the doc, and start typing." disabled></textarea>
+            </div>
+          </div>
+        </section>
       </section>
-      <section class="panel editor-panel">
-        <label class="editor-label" for="editor">Shared Plain Text</label>
-        <textarea id="editor" spellcheck="false" placeholder="Connect two browser tabs and start typing." disabled></textarea>
-      </section>
-      <aside id="debug-panel" class="panel debug-panel" hidden>
+
+      <aside id="debug-panel" class="debug-panel" hidden>
         <div class="debug-panel-header">
           <h2>Debug Panel</h2>
-          <p>Operator-facing diagnostics for reconnect, replay, and blocked queue flows.</p>
+          <p>Operator-facing diagnostics for session, queue, replay, and presence without payload leakage.</p>
         </div>
         <div class="debug-panel-grid">
           <section class="debug-card" aria-labelledby="debug-session-heading">

@@ -55,13 +55,13 @@ test("debug panel shell is collapsed by default and toggleable without affecting
     const documentID = document.getElementById("debug-document-id")?.textContent?.trim();
     const connection = document.getElementById("debug-connection-state")?.textContent?.trim();
     const pendingCount = document.getElementById("debug-pending-queue-count")?.textContent?.trim();
-    const replayState = document.getElementById("debug-replay-state")?.textContent?.trim();
+    const queueState = document.getElementById("debug-queue-state")?.textContent?.trim();
     const eventTypes = Array.from(document.querySelectorAll(".debug-event-type")).map((node) => node.textContent?.trim());
     return actor === "actor-debug-shell"
       && documentID === "doc-debug-shell"
       && connection === "live"
+      && queueState === "live"
       && pendingCount === "0"
-      && replayState === "idle"
       && eventTypes.includes("state_ready")
       && eventTypes.includes("connect_requested");
   }, null, { timeout: 5000 });

@@ -107,6 +107,32 @@ func TestRebuildDocumentFromSnapshotPlusLaterOperations(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadDocumentMetadata(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	record := DocumentMetadataRecord{
+		DocumentID:        "doc_1",
+		Title:             "Design Notes",
+		UpdatedAt:         time.Now().UTC(),
+		LastEditorActorID: "actor_a",
+	}
+	if err := store.SaveDocumentMetadata(ctx, record); err != nil {
+		t.Fatalf("SaveDocumentMetadata() error = %v, want nil", err)
+	}
+
+	got, err := store.LoadDocumentMetadata(ctx, "doc_1")
+	if err != nil {
+		t.Fatalf("LoadDocumentMetadata() error = %v, want nil", err)
+	}
+	if got.Title != record.Title {
+		t.Fatalf("Title = %q, want %q", got.Title, record.Title)
+	}
+	if got.LastEditorActorID != record.LastEditorActorID {
+		t.Fatalf("LastEditorActorID = %q, want %q", got.LastEditorActorID, record.LastEditorActorID)
+	}
+}
+
 func TestPersistenceLogsAppendAndSnapshotMutations(t *testing.T) {
 	var logBuffer bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuffer, nil))
@@ -130,6 +156,14 @@ func TestPersistenceLogsAppendAndSnapshotMutations(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveSnapshot() error = %v, want nil", err)
 	}
+	if err := store.SaveDocumentMetadata(ctx, DocumentMetadataRecord{
+		DocumentID:        "doc_1",
+		Title:             "Debug Notes",
+		UpdatedAt:         time.Now().UTC(),
+		LastEditorActorID: "actor_a",
+	}); err != nil {
+		t.Fatalf("SaveDocumentMetadata() error = %v, want nil", err)
+	}
 
 	logOutput := logBuffer.String()
 	if !strings.Contains(logOutput, "append operation") {
@@ -138,8 +172,14 @@ func TestPersistenceLogsAppendAndSnapshotMutations(t *testing.T) {
 	if !strings.Contains(logOutput, "save snapshot") {
 		t.Fatalf("log output = %q, want save snapshot entry", logOutput)
 	}
+	if !strings.Contains(logOutput, "save document metadata") {
+		t.Fatalf("log output = %q, want save document metadata entry", logOutput)
+	}
 	if strings.Contains(logOutput, "operation_value") {
 		t.Fatalf("log output = %q, want no raw text payload values", logOutput)
+	}
+	if strings.Contains(logOutput, "Debug Notes") {
+		t.Fatalf("log output = %q, want no raw title payload values", logOutput)
 	}
 }
 

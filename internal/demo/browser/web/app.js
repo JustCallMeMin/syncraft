@@ -18,13 +18,25 @@ import { createBrowserStatusState } from "/browser_status_state.js";
 import { createDebugPanelState } from "/browser_debug_panel_state.js";
 import { deriveDebugPanelDiagnostics } from "/browser_debug_panel_diagnostics.js";
 import { createDebugEventBuffer } from "/browser_debug_event_buffer.js";
+import { deriveSaveState } from "/browser_save_state.js";
+import { colorTokenForActor } from "/browser_collaborator_palette.js";
+import {
+  anchorForRuneIndex,
+  codeUnitIndexFromRuneIndex,
+  runeIndexFromAnchor,
+  runeIndexFromCodeUnitIndex,
+} from "/browser_presence_mapping.js";
 
 const form = document.getElementById("connect-form");
 const actorInput = document.getElementById("actor-id");
 const documentInput = document.getElementById("document-id");
+const titleInput = document.getElementById("document-title");
+const saveStateChipNode = document.getElementById("save-state-chip");
+const collaboratorStripNode = document.getElementById("collaborator-strip");
 const reconnectButton = document.getElementById("reconnect-button");
 const debugPanelToggleButton = document.getElementById("debug-panel-toggle");
 const debugPanel = document.getElementById("debug-panel");
+const presenceLayer = document.getElementById("presence-layer");
 const debugActorInstanceNode = document.getElementById("debug-actor-instance");
 const debugDocumentIDNode = document.getElementById("debug-document-id");
 const debugConnectionStateNode = document.getElementById("debug-connection-state");
@@ -61,6 +73,12 @@ let isComposingText = false;
 let liveSubmitInFlight = false;
 let pendingEditorText = null;
 let sessionReady = false;
+let titleUpdateInFlight = false;
+let titleDirty = false;
+let titleSyncTimer = null;
+let persistedDocumentTitle = "Untitled document";
+let collaborators = [];
+let presenceUpdateTimer = null;
 const browserStatusState = createBrowserStatusState();
 const debugPanelState = createDebugPanelState(false);
 const debugEventBuffer = createDebugEventBuffer(50);
@@ -74,8 +92,8 @@ if (restoredSessionIntent) {
 }
 
 initializeQueueStore();
-  if (restoredSessionIntent) {
-    connect(restoredSessionIntent, {
+if (restoredSessionIntent) {
+  connect(restoredSessionIntent, {
     preserveSessionState: false,
   }).catch((error) => {
     setStatus("error", error.message);
@@ -116,8 +134,19 @@ debugPanelToggleButton.addEventListener("click", () => {
   renderDebugPanel(debugPanelState.toggle());
 });
 
+titleInput.addEventListener("input", () => {
+  titleDirty = true;
+  updateSaveStateChip();
+  scheduleTitleSync(350);
+});
+
+titleInput.addEventListener("blur", async () => {
+  await flushTitleSync();
+});
+
 editor.addEventListener("input", async () => {
   await processEditorChange();
+  schedulePresenceUpdate(90);
 });
 
 editor.addEventListener("compositionstart", () => {
@@ -127,6 +156,26 @@ editor.addEventListener("compositionstart", () => {
 editor.addEventListener("compositionend", async () => {
   isComposingText = false;
   await processEditorChange();
+  schedulePresenceUpdate(90);
+});
+
+editor.addEventListener("click", () => {
+  schedulePresenceUpdate(50);
+});
+
+editor.addEventListener("keyup", () => {
+  schedulePresenceUpdate(50);
+});
+
+editor.addEventListener("focus", () => {
+  schedulePresenceUpdate(20);
+});
+
+document.addEventListener("selectionchange", () => {
+  if (document.activeElement !== editor) {
+    return;
+  }
+  schedulePresenceUpdate(50);
 });
 
 async function processEditorChange() {
@@ -193,6 +242,9 @@ async function connect(intent, options = {}) {
     setStatus("connecting", "");
     editor.disabled = true;
     sessionReady = false;
+    collaborators = [];
+    renderCollaborators();
+    renderPresenceLayer();
   } else {
     updateEditorDisabled(browserStatusState.getConnectionState());
   }
@@ -236,14 +288,26 @@ async function connect(intent, options = {}) {
     editor.value = message.text || "";
     lastText = editor.value;
     localVisibleElements = Array.isArray(message.visible_elements) ? message.visible_elements : [];
+    collaborators = Array.isArray(message.collaborators) ? message.collaborators : [];
+    if (typeof message.title === "string" && message.title.trim() !== "") {
+      persistedDocumentTitle = message.title.trim();
+      if (!titleDirty || titleInput.value.trim() === persistedDocumentTitle) {
+        titleInput.value = persistedDocumentTitle;
+        titleDirty = false;
+      }
+      titleUpdateInFlight = false;
+    }
     applyingRemoteState = false;
     setStatus(message.connection_state || "live", message.last_error || "");
     updateEditorDisabled(message.connection_state || "live");
     reconnectButton.disabled = false;
+    renderCollaborators();
+    renderPresenceLayer();
     updateMetadataFromState(message).catch((error) => {
       setStatus("error", `offline metadata save failed: ${error.message}`);
       updateEditorDisabled("error");
     });
+    schedulePresenceUpdate(40);
     if (message.connection_state === "live" && reconnectingWithQueue && pendingQueueRecords.length > 0 && !replayInFlight) {
       replayPendingQueue().catch((error) => {
         setQueueBlocked(`offline replay failed: ${error.message}`);
@@ -277,6 +341,8 @@ async function connect(intent, options = {}) {
     setStatus("disconnected", "");
     updateEditorDisabled("disconnected");
     reconnectButton.disabled = false;
+    renderCollaborators();
+    renderPresenceLayer();
     if (intent.retry) {
       emitDebugEvent("reconnect_scheduled", "warning", "Reconnect scheduled after disconnect.", {
         retry_delay_ms: 750,
@@ -303,12 +369,72 @@ async function connect(intent, options = {}) {
       setStatus("disconnected", "");
       updateEditorDisabled("disconnected");
       reconnectButton.disabled = false;
+      renderCollaborators();
+      renderPresenceLayer();
       return;
     }
     setStatus("error", "websocket connection failed");
     updateEditorDisabled("error");
     reconnectButton.disabled = false;
   });
+}
+
+function scheduleTitleSync(delayMs) {
+  window.clearTimeout(titleSyncTimer);
+  titleSyncTimer = window.setTimeout(() => {
+    flushTitleSync().catch((error) => {
+      setStatus("error", error.message);
+      updateEditorDisabled("error");
+    });
+  }, delayMs);
+}
+
+async function flushTitleSync() {
+  if (!sessionIntent || !socket || socket.readyState !== WebSocket.OPEN || !sessionReady) {
+    return;
+  }
+  const nextTitle = normalizeTitle(titleInput.value);
+  if (nextTitle === persistedDocumentTitle) {
+    titleDirty = false;
+    updateSaveStateChip();
+    return;
+  }
+  titleUpdateInFlight = true;
+  updateSaveStateChip();
+  socket.send(JSON.stringify({
+    type: "update_title",
+    title: nextTitle,
+  }));
+}
+
+function schedulePresenceUpdate(delayMs) {
+  if (!sessionIntent || !socket || socket.readyState !== WebSocket.OPEN || !sessionReady) {
+    return;
+  }
+  window.clearTimeout(presenceUpdateTimer);
+  presenceUpdateTimer = window.setTimeout(() => {
+    sendPresenceUpdate();
+  }, delayMs);
+}
+
+function sendPresenceUpdate() {
+  if (!sessionIntent || !socket || socket.readyState !== WebSocket.OPEN || !sessionReady) {
+    return;
+  }
+  const selectionStart = typeof editor.selectionStart === "number" ? editor.selectionStart : 0;
+  const selectionEnd = typeof editor.selectionEnd === "number" ? editor.selectionEnd : selectionStart;
+  const anchorRuneIndex = runeIndexFromCodeUnitIndex(editor.value, selectionStart);
+  const focusRuneIndex = runeIndexFromCodeUnitIndex(editor.value, selectionEnd);
+  socket.send(JSON.stringify({
+    type: "presence_update",
+    presence: {
+      display_name: actorInput.value.trim(),
+      cursor_anchor: anchorForRuneIndex(anchorRuneIndex, localVisibleElements),
+      cursor_focus: anchorForRuneIndex(focusRuneIndex, localVisibleElements),
+      selection_direction: selectionStart <= selectionEnd ? "forward" : "backward",
+      is_collapsed: selectionStart === selectionEnd,
+    },
+  }));
 }
 
 async function initializeQueueStore() {
@@ -326,6 +452,77 @@ async function initializeQueueStore() {
     setStatus("error", queueBlockedReason);
     updateEditorDisabled("error");
   }
+}
+
+function updateSaveStateChip() {
+  const saveState = deriveSaveState({
+    connectionState: browserStatusState.getConnectionState(),
+    pendingQueueCount: queueMetadata?.pending_queue_count ?? pendingQueueRecords.length,
+    blockedReason: queueBlockedReason,
+    replayInFlight,
+    liveSubmitInFlight,
+    titleUpdateInFlight,
+  });
+  saveStateChipNode.textContent = saveState.label;
+  saveStateChipNode.className = `save-state-chip save-state-${saveState.tone}`;
+}
+
+function renderCollaborators() {
+  const remoteCollaborators = collaborators.filter((collaborator) => !collaborator.is_self);
+  if (remoteCollaborators.length === 0) {
+    collaboratorStripNode.innerHTML = '<span class="collaborator-empty">No collaborators yet</span>';
+    return;
+  }
+  collaboratorStripNode.innerHTML = remoteCollaborators.map((collaborator) => {
+    const color = colorTokenForActor(collaborator.actor_id);
+    const label = escapeHTML(collaborator.display_name || collaborator.actor_id || "Collaborator");
+    return `
+      <span class="collaborator-chip">
+        <span class="collaborator-dot" style="background:${color}"></span>
+        <span>${label}</span>
+      </span>
+    `;
+  }).join("");
+}
+
+function renderPresenceLayer() {
+  if (!presenceLayer) {
+    return;
+  }
+  const text = editor.value;
+  const remoteCollaborators = collaborators.filter((collaborator) => !collaborator.is_self);
+  if (remoteCollaborators.length === 0 || text === "") {
+    presenceLayer.innerHTML = "";
+    return;
+  }
+  const nodes = [];
+  for (const collaborator of remoteCollaborators) {
+    const color = colorTokenForActor(collaborator.actor_id);
+    const anchorRuneIndex = runeIndexFromAnchor(collaborator.cursor_anchor, localVisibleElements);
+    const focusRuneIndex = runeIndexFromAnchor(collaborator.cursor_focus, localVisibleElements);
+    const startRuneIndex = Math.min(anchorRuneIndex, focusRuneIndex);
+    const endRuneIndex = Math.max(anchorRuneIndex, focusRuneIndex);
+    const rect = measureTextRange(editor, text, startRuneIndex, Math.max(startRuneIndex, endRuneIndex));
+    if (!rect) {
+      continue;
+    }
+    const displayName = escapeHTML(collaborator.display_name || collaborator.actor_id || "Collaborator");
+    if (!collaborator.is_collapsed && rect.width > 0 && rect.height > 0) {
+      nodes.push(`
+        <div class="remote-selection" style="left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;background:${color};"></div>
+      `);
+    }
+    const caretRect = measureTextCaret(editor, text, focusRuneIndex);
+    if (!caretRect) {
+      continue;
+    }
+    nodes.push(`
+      <div class="remote-caret" style="left:${caretRect.left}px;top:${caretRect.top}px;height:${caretRect.height}px;background:${color};">
+        <span class="remote-caret-label" style="background:${color};">${displayName}</span>
+      </div>
+    `);
+  }
+  presenceLayer.innerHTML = nodes.join("");
 }
 
 async function loadPendingQueue(intent) {
@@ -698,10 +895,15 @@ function resetSessionState(intent) {
   reconnectingWithQueue = false;
   replayInFlight = false;
   localVisibleElements = [];
+  collaborators = [];
   sessionReady = false;
   pendingEditorText = null;
   stateWaiters = [];
   lastText = "";
+  titleUpdateInFlight = false;
+  titleDirty = false;
+  persistedDocumentTitle = "Untitled document";
+  titleInput.value = persistedDocumentTitle;
   window.syncraftPendingQueueRecords = pendingQueueRecords;
   window.syncraftQueueMetadata = queueMetadata;
   const nextStatus = browserStatusState.reset();
@@ -714,6 +916,9 @@ function resetSessionState(intent) {
     actorInput.value = intent.actorID;
     documentInput.value = intent.documentID;
   }
+  renderCollaborators();
+  renderPresenceLayer();
+  updateSaveStateChip();
   renderDebugDiagnostics();
 }
 
@@ -726,6 +931,7 @@ function updateEditorDisabled(connectionState) {
     hasQueueMetadata: Boolean(queueMetadata),
     connectionState,
   });
+  titleInput.disabled = !sessionIntent || replayInFlight || Boolean(queueBlockedReason) || !socket || socket.readyState !== WebSocket.OPEN || !sessionReady;
 }
 
 function setStatus(state, errorText) {
@@ -740,7 +946,63 @@ function setStatus(state, errorText) {
   statusNode.className = `status-${surface.state}`;
   queueSummaryNode.textContent = surface.queueSummary;
   errorNode.textContent = nextStatus.errorText;
+  updateSaveStateChip();
   renderDebugDiagnostics();
+}
+
+function normalizeTitle(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized === "" ? "Untitled document" : normalized;
+}
+
+function measureTextCaret(textarea, text, runeIndex) {
+  return measureTextRange(textarea, text, runeIndex, runeIndex);
+}
+
+function measureTextRange(textarea, text, startRuneIndex, endRuneIndex) {
+  if (!(textarea instanceof HTMLTextAreaElement)) {
+    return null;
+  }
+  const startCodeUnitIndex = codeUnitIndexFromRuneIndex(text, startRuneIndex);
+  const endCodeUnitIndex = codeUnitIndexFromRuneIndex(text, endRuneIndex);
+  const selectionText = text.slice(startCodeUnitIndex, endCodeUnitIndex);
+  const styles = window.getComputedStyle(textarea);
+  const mirror = document.createElement("div");
+  mirror.style.position = "absolute";
+  mirror.style.visibility = "hidden";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.wordWrap = "break-word";
+  mirror.style.overflow = "hidden";
+  mirror.style.width = `${textarea.clientWidth}px`;
+  mirror.style.font = styles.font;
+  mirror.style.fontFamily = styles.fontFamily;
+  mirror.style.fontSize = styles.fontSize;
+  mirror.style.fontWeight = styles.fontWeight;
+  mirror.style.lineHeight = styles.lineHeight;
+  mirror.style.letterSpacing = styles.letterSpacing;
+  mirror.style.padding = styles.padding;
+  mirror.style.border = styles.border;
+  mirror.style.top = "-9999px";
+  mirror.style.left = "0";
+  mirror.style.tabSize = styles.tabSize;
+
+  const before = document.createTextNode(text.slice(0, startCodeUnitIndex));
+  const marker = document.createElement("span");
+  marker.textContent = selectionText || "\u200b";
+  const after = document.createTextNode(text.slice(endCodeUnitIndex) || "\u200b");
+  mirror.append(before, marker, after);
+  document.body.appendChild(mirror);
+
+  const markerRect = marker.getBoundingClientRect();
+  const mirrorRect = mirror.getBoundingClientRect();
+  const result = {
+    left: Math.max(0, markerRect.left - mirrorRect.left - textarea.scrollLeft),
+    top: Math.max(0, markerRect.top - mirrorRect.top - textarea.scrollTop),
+    width: Math.max(selectionText ? markerRect.width : 2, 2),
+    height: Math.max(markerRect.height, parseFloat(styles.lineHeight) || 20),
+  };
+  mirror.remove();
+  return result;
 }
 
 window.syncraftBrowserTestAPI = {
@@ -763,6 +1025,12 @@ window.syncraftBrowserTestAPI = {
       replayInFlight,
       debugEvents: debugEventBuffer.list(),
     });
+  },
+  getCollaborators() {
+    return collaborators;
+  },
+  getDocumentTitle() {
+    return titleInput.value;
   },
 };
 
@@ -879,4 +1147,7 @@ function escapeHTML(value) {
 
 renderDebugDiagnostics();
 renderDebugPanel(debugPanelState.isExpanded());
+renderCollaborators();
+renderPresenceLayer();
+updateSaveStateChip();
 

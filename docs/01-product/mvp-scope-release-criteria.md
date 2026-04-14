@@ -202,3 +202,17 @@ diagnosis while logs remain the primary technical audit source. Broader dashboar
 of scope.
 The accepted boundary is recorded in
 [`../03-planning-and-validation/observability-ux-debug-panel-adr.md`](../03-planning-and-validation/observability-ux-debug-panel-adr.md).
+
+The next approved tranche after observability UX is a docs-core web UX upgrade.
+Its currently accepted direction is:
+
+- document title as persistent metadata
+- save and sync state chrome in the normal browser UI
+- live collaborator presence with remote caret and basic selection
+- deeper browser QA across functional, accessibility, and state-matrix coverage
+
+This remains post-v1 scope only.
+It does not widen the v1 release contract retroactively, and it still excludes comments,
+suggestion mode, rich text, permissions, and workspace management.
+The accepted boundary is recorded in
+[`../03-planning-and-validation/docs-core-web-ux-adr.md`](../03-planning-and-validation/docs-core-web-ux-adr.md).

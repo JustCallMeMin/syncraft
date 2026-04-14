@@ -120,7 +120,7 @@ test("offline replay converges to the same visible text as the online flow", asy
 async function connectEditor(page, origin, actorID, documentID) {
   await page.goto(origin);
   await page.getByLabel("Actor Instance").fill(actorID);
-  await page.getByLabel("Document").fill(documentID);
+  await page.locator("#document-id").fill(documentID);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.waitForFunction(() => {
     const status = document.getElementById("status")?.textContent?.trim();

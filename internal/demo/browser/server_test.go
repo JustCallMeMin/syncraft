@@ -312,6 +312,61 @@ func TestBrowserShellServesFavicon(t *testing.T) {
 	}
 }
 
+func TestBrowserShellBootstrapsDocumentTitleAndCollaborators(t *testing.T) {
+	server := newTestServer(t)
+	handler, err := server.Handler()
+	if err != nil {
+		t.Fatalf("Handler() error = %v, want nil", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	defer httpServer.Close()
+
+	clientA := mustDial(t, httpServer.URL)
+	defer clientA.Close()
+	clientB := mustDial(t, httpServer.URL)
+	defer clientB.Close()
+
+	mustSend(t, clientA, browserCommand{Type: "init", ActorID: "actor_a", DocumentID: "demo-doc"})
+	stateA := mustReadState(t, clientA)
+	if stateA.Title != "Untitled document" {
+		t.Fatalf("initial Title = %q, want %q", stateA.Title, "Untitled document")
+	}
+
+	mustSend(t, clientB, browserCommand{Type: "init", ActorID: "actor_b", DocumentID: "demo-doc"})
+	_ = mustReadState(t, clientB)
+
+	mustSend(t, clientA, browserCommand{Type: "update_title", Title: "Team Notes"})
+	stateA = mustReadStateUntil(t, clientA, func(state browserStateMessage) bool {
+		return state.Title == "Team Notes"
+	})
+	stateB := mustReadStateUntil(t, clientB, func(state browserStateMessage) bool {
+		return state.Title == "Team Notes"
+	})
+	if stateA.Title != "Team Notes" || stateB.Title != "Team Notes" {
+		t.Fatalf("titles = (%q, %q), want (%q, %q)", stateA.Title, stateB.Title, "Team Notes", "Team Notes")
+	}
+
+	mustSend(t, clientA, browserCommand{
+		Type: "presence_update",
+		Presence: &browserPresence{
+			DisplayName: "Actor A",
+			CursorAnchor: &browserPresenceAnchor{
+				FallbackIndex: 0,
+			},
+			CursorFocus: &browserPresenceAnchor{
+				FallbackIndex: 0,
+			},
+			IsCollapsed: true,
+		},
+	})
+	stateB = mustReadStateUntil(t, clientB, func(state browserStateMessage) bool {
+		return len(state.Collaborators) == 1 && state.Collaborators[0].ActorID == "actor_a"
+	})
+	if len(stateB.Collaborators) != 1 {
+		t.Fatalf("len(Collaborators) = %d, want 1", len(stateB.Collaborators))
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	server, err := NewServer(t.TempDir())
@@ -374,6 +429,19 @@ func mustReadStateUntilText(t *testing.T, conn *websocket.Conn, want string) bro
 		}
 	}
 	t.Fatalf("did not observe text %q before timeout", want)
+	return browserStateMessage{}
+}
+
+func mustReadStateUntil(t *testing.T, conn *websocket.Conn, predicate func(browserStateMessage) bool) browserStateMessage {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state := mustReadState(t, conn)
+		if predicate(state) {
+			return state
+		}
+	}
+	t.Fatal("did not observe expected state before timeout")
 	return browserStateMessage{}
 }
 

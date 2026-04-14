@@ -25,13 +25,21 @@ type sessionState struct {
 	outbox        []any
 }
 
+type presenceRecord struct {
+	documentID model.DocumentID
+	payload    protocol.PresencePayload
+}
+
 // Service runs the live sync pipeline over validated protocol messages.
 type Service struct {
-	store    *persistence.FileStore
-	logger   *slog.Logger
-	mu       sync.Mutex
-	sessions map[string]*sessionState
-	docs     map[model.DocumentID]*engine.Document
+	store       *persistence.FileStore
+	logger      *slog.Logger
+	mu          sync.Mutex
+	sessions    map[string]*sessionState
+	docs        map[model.DocumentID]*engine.Document
+	metadata    map[model.DocumentID]persistence.DocumentMetadataRecord
+	presence    map[model.DocumentID]map[string]presenceRecord
+	presenceTTL time.Duration
 }
 
 // NewService constructs a live sync service over one persistence store.
@@ -41,6 +49,9 @@ func NewService(store *persistence.FileStore) *Service {
 		logger:   slog.Default(),
 		sessions: make(map[string]*sessionState),
 		docs:     make(map[model.DocumentID]*engine.Document),
+		metadata: make(map[model.DocumentID]persistence.DocumentMetadataRecord),
+		presence: make(map[model.DocumentID]map[string]presenceRecord),
+		presenceTTL: 15 * time.Second,
 	}
 }
 
@@ -95,6 +106,9 @@ func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDoc
 	if _, err := s.documentLocked(ctx, msg.DocumentID); err != nil {
 		return nil, nil, err
 	}
+	if _, err := s.documentMetadataLocked(ctx, msg.DocumentID); err != nil {
+		return nil, nil, err
+	}
 
 	subscriptionMode, err := s.subscriptionModeLocked(ctx, msg.DocumentID, msg.KnownLastOperationID)
 	if err != nil {
@@ -119,6 +133,139 @@ func (s *Service) HandleSubscribe(ctx context.Context, msg protocol.SubscribeDoc
 		"subscription_mode", subscriptionMode,
 	)
 	return ack, nil, nil
+}
+
+// HandleUpdateTitle validates, persists, and fans out one document title change.
+func (s *Service) HandleUpdateTitle(ctx context.Context, msg protocol.UpdateDocumentTitleMessage) ([]protocol.DocumentTitleChangedMessage, *protocol.ErrorMessage, error) {
+	if err := msg.Validate(); err != nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidTitle, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidTitle, err), nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session := s.sessions[msg.SessionID]
+	if session == nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession), nil
+	}
+	if !session.subscriptions[msg.DocumentID] {
+		err := fmt.Errorf("session is not subscribed to document")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, err), nil
+	}
+
+	record := persistence.DocumentMetadataRecord{
+		DocumentID:        msg.DocumentID,
+		Title:             msg.Title,
+		UpdatedAt:         time.Now().UTC(),
+		LastEditorActorID: session.actorID,
+	}
+	if err := s.store.SaveDocumentMetadata(ctx, record); err != nil {
+		return nil, nil, err
+	}
+	s.metadata[msg.DocumentID] = record
+
+	changed := protocol.DocumentTitleChangedMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypeTitleChanged,
+			DocumentID:      msg.DocumentID,
+			SessionID:       "server",
+			MessageID:       msg.MessageID,
+		},
+		Title:             record.Title,
+		LastEditorActorID: record.LastEditorActorID,
+		UpdatedAt:         record.UpdatedAt,
+	}
+
+	out := make([]protocol.DocumentTitleChangedMessage, 0)
+	for _, subscriber := range s.sessions {
+		if !subscriber.subscriptions[msg.DocumentID] {
+			continue
+		}
+		subscriber.outbox = append(subscriber.outbox, changed)
+		out = append(out, changed)
+	}
+
+	s.logger.InfoContext(ctx, "update document title",
+		"session_id", msg.SessionID,
+		"actor_id", session.actorID,
+		"document_id", msg.DocumentID,
+		"title_length", len([]rune(msg.Title)),
+		"subscriber_count", len(out),
+	)
+	return out, nil, nil
+}
+
+// HandlePresenceUpdate validates one ephemeral presence update and broadcasts it to subscribers.
+func (s *Service) HandlePresenceUpdate(ctx context.Context, msg protocol.PresenceUpdateMessage) ([]protocol.PresenceBroadcastMessage, *protocol.ErrorMessage, error) {
+	if err := msg.Validate(); err != nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidPresence, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidPresence, err), nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session := s.sessions[msg.SessionID]
+	if session == nil {
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, ErrUnknownSession), nil
+	}
+	if session.actorID != msg.Presence.ActorID {
+		err := fmt.Errorf("presence actor_id must match session actor_id")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidPresence, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidPresence, err), nil
+	}
+	if msg.Presence.SessionID != msg.SessionID {
+		err := fmt.Errorf("presence session_id must match envelope session_id")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeInvalidPresence, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeInvalidPresence, err), nil
+	}
+	if !session.subscriptions[msg.DocumentID] {
+		err := fmt.Errorf("session is not subscribed to document")
+		s.logProtocolReject(ctx, msg.Envelope, protocol.ErrorCodeUnauthorized, err)
+		return nil, protocolError(msg.Envelope, protocol.ErrorCodeUnauthorized, err), nil
+	}
+
+	s.prunePresenceLocked(msg.DocumentID)
+	if s.presence[msg.DocumentID] == nil {
+		s.presence[msg.DocumentID] = make(map[string]presenceRecord)
+	}
+	s.presence[msg.DocumentID][msg.SessionID] = presenceRecord{
+		documentID: msg.DocumentID,
+		payload:    msg.Presence,
+	}
+
+	broadcast := protocol.PresenceBroadcastMessage{
+		Envelope: protocol.Envelope{
+			ProtocolVersion: protocol.VersionV1,
+			MessageType:     protocol.MessageTypePresenceBroadcast,
+			DocumentID:      msg.DocumentID,
+			SessionID:       "server",
+			MessageID:       msg.MessageID,
+		},
+		Presence: msg.Presence,
+	}
+
+	out := make([]protocol.PresenceBroadcastMessage, 0)
+	for _, subscriber := range s.sessions {
+		if !subscriber.subscriptions[msg.DocumentID] {
+			continue
+		}
+		subscriber.outbox = append(subscriber.outbox, broadcast)
+		out = append(out, broadcast)
+	}
+	s.logger.InfoContext(ctx, "update presence",
+		"session_id", msg.SessionID,
+		"actor_id", session.actorID,
+		"document_id", msg.DocumentID,
+		"is_collapsed", msg.Presence.IsCollapsed,
+		"subscriber_count", len(out),
+	)
+	return out, nil, nil
 }
 
 // HandleRequestCatchup serves snapshot-plus-delta state transfer for one subscribed session.
@@ -310,6 +457,70 @@ func (s *Service) SessionOutbox(sessionID string) []any {
 	return out
 }
 
+// DocumentMetadata returns the current title metadata for one document.
+func (s *Service) DocumentMetadata(ctx context.Context, documentID model.DocumentID) (persistence.DocumentMetadataRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.documentMetadataLocked(ctx, documentID)
+}
+
+// PresenceSnapshot returns the current non-stale collaborator set for one document.
+func (s *Service) PresenceSnapshot(documentID model.DocumentID) []protocol.PresencePayload {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.prunePresenceLocked(documentID)
+	records := s.presence[documentID]
+	out := make([]protocol.PresencePayload, 0, len(records))
+	for _, record := range records {
+		out = append(out, record.payload)
+	}
+	return out
+}
+
+// DisconnectSession removes one session and returns any presence removals that must fan out.
+func (s *Service) DisconnectSession(sessionID string) []protocol.PresenceBroadcastMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session := s.sessions[sessionID]
+	if session == nil {
+		return nil
+	}
+	delete(s.sessions, sessionID)
+
+	out := make([]protocol.PresenceBroadcastMessage, 0)
+	for documentID, records := range s.presence {
+		record, ok := records[sessionID]
+		if !ok {
+			continue
+		}
+		delete(records, sessionID)
+		if len(records) == 0 {
+			delete(s.presence, documentID)
+		}
+
+		broadcast := protocol.PresenceBroadcastMessage{
+			Envelope: protocol.Envelope{
+				ProtocolVersion: protocol.VersionV1,
+				MessageType:     protocol.MessageTypePresenceBroadcast,
+				DocumentID:      documentID,
+				SessionID:       "server",
+				MessageID:       fmt.Sprintf("presence_remove_%d", time.Now().UTC().UnixNano()),
+			},
+			Presence: record.payload,
+			Removed:  true,
+		}
+		for _, subscriber := range s.sessions {
+			if !subscriber.subscriptions[documentID] {
+				continue
+			}
+			subscriber.outbox = append(subscriber.outbox, broadcast)
+			out = append(out, broadcast)
+		}
+	}
+	return out
+}
+
 func (s *Service) documentLocked(ctx context.Context, documentID model.DocumentID) (*engine.Document, error) {
 	if doc := s.docs[documentID]; doc != nil {
 		return doc, nil
@@ -321,6 +532,49 @@ func (s *Service) documentLocked(ctx context.Context, documentID model.DocumentI
 	}
 	s.docs[documentID] = doc
 	return doc, nil
+}
+
+func (s *Service) documentMetadataLocked(ctx context.Context, documentID model.DocumentID) (persistence.DocumentMetadataRecord, error) {
+	if record, ok := s.metadata[documentID]; ok {
+		return record, nil
+	}
+
+	record, err := s.store.LoadDocumentMetadata(ctx, documentID)
+	if err == nil {
+		s.metadata[documentID] = *record
+		return *record, nil
+	}
+	if !errors.Is(err, persistence.ErrDocumentMetadataNotFound) {
+		return persistence.DocumentMetadataRecord{}, err
+	}
+
+	defaultRecord := persistence.DocumentMetadataRecord{
+		DocumentID: documentID,
+		Title:      "Untitled document",
+		UpdatedAt:  time.Now().UTC(),
+	}
+	if saveErr := s.store.SaveDocumentMetadata(ctx, defaultRecord); saveErr != nil {
+		return persistence.DocumentMetadataRecord{}, saveErr
+	}
+	s.metadata[documentID] = defaultRecord
+	return defaultRecord, nil
+}
+
+func (s *Service) prunePresenceLocked(documentID model.DocumentID) {
+	records := s.presence[documentID]
+	if len(records) == 0 {
+		return
+	}
+	now := time.Now().UTC()
+	for sessionID, record := range records {
+		if now.Sub(record.payload.LastSeenAt) <= s.presenceTTL {
+			continue
+		}
+		delete(records, sessionID)
+	}
+	if len(records) == 0 {
+		delete(s.presence, documentID)
+	}
 }
 
 func (s *Service) subscriptionModeLocked(ctx context.Context, documentID model.DocumentID, knownLast *model.OperationID) (string, error) {
@@ -389,6 +643,14 @@ func protocolError(envelope protocol.Envelope, code string, err error) *protocol
 		ErrorCode:    code,
 		ErrorMessage: err.Error(),
 	}
+}
+
+// SetPresenceTTL overrides the expiry window for ephemeral presence state.
+func (s *Service) SetPresenceTTL(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	s.presenceTTL = ttl
 }
 
 func (s *Service) logProtocolReject(ctx context.Context, envelope protocol.Envelope, code string, err error) {

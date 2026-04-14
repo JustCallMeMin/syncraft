@@ -31,11 +31,14 @@ This protocol spec does not cover:
 
 - authentication design
 - rich-text or block document semantics
-- presence features beyond minimal session connection semantics
 - post-v1 compaction or tombstone garbage collection
 
 This protocol spec does not by itself promise broad offline-first behavior. The only approved
-post-v1 direction captured here is the replay boundary for the browser-only offline queueing alpha.
+post-v1 directions captured here are:
+
+- the replay boundary for the browser-only offline queueing alpha
+- lightweight title metadata bootstrap and update rules for the docs-core web UX tranche
+- ephemeral collaborator presence snapshot and update rules for the docs-core web UX tranche
 
 ## Protocol Goals
 
@@ -55,6 +58,8 @@ The transport is used for:
 - operation submission
 - operation broadcast
 - reconnect bootstrap coordination
+- title metadata bootstrap and update fanout
+- presence snapshot and presence update fanout
 - error reporting
 
 The protocol must not depend on server-side total ordering for merge correctness.
@@ -139,7 +144,38 @@ The v1 protocol uses these message types:
 - `catchup_snapshot`
 - `catchup_operations`
 - `catchup_complete`
+- `update_document_title`
+- `document_title_changed`
+- `presence_update`
+- `presence_snapshot`
+- `presence_broadcast`
 - `error`
+
+## Post-v1 Title Metadata Boundary
+
+The docs-core web UX tranche allows one persistent document metadata field through the
+protocol:
+
+- `title`
+
+### Rules
+
+- title is document metadata, not CRDT text content
+- title must be persisted separately from the operation log used for CRDT replay
+- title updates may be validated and fanned out by the server
+- title updates must not change replay semantics for plain-text document content
+
+## Post-v1 Presence Boundary
+
+The docs-core web UX tranche allows ephemeral collaborator presence traffic.
+
+### Rules
+
+- presence is document-scoped and session-scoped
+- presence must not be written into operation-log or snapshot persistence
+- presence must not affect CRDT ordering, merge rules, or replay truth
+- stale presence may expire by timeout
+- presence updates must not contain raw document text or payload dumps
 
 ## Client Hello
 

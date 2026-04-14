@@ -209,6 +209,22 @@ Its accepted direction is:
 This boundary is accepted in
 [`../03-planning-and-validation/observability-ux-debug-panel-adr.md`](../03-planning-and-validation/observability-ux-debug-panel-adr.md).
 
+The next approved tranche after observability UX is a docs-core web upgrade for the browser
+surface. Its accepted direction is:
+
+- keep the document model plain text only
+- add document title UX as persistent metadata
+- add save and sync state chrome
+- add live collaborator presence with remote caret and basic selection
+- keep comments, suggestion mode, rich text, permissions, and workspace management out of
+  scope
+
+This is intended to make the browser surface feel materially closer to a practical
+Docs-like collaboration product for plain text without weakening the current server,
+replay, or CRDT guarantees.
+The accepted boundary is recorded in
+[`../03-planning-and-validation/docs-core-web-ux-adr.md`](../03-planning-and-validation/docs-core-web-ux-adr.md).
+
 ## Open Questions
 
 - Which initial demo scenario best communicates value to non-technical reviewers?

@@ -19,6 +19,8 @@ replay constraints for the post-v1 offline queueing alpha.
 - queued offline operations, once replayed after reconnect, must converge to the same visible text
   as the equivalent continuously online operation set
 - duplicate replay of already accepted queued operations must not alter final visible state
+- presence traffic, title updates, and browser diagnostics must not alter CRDT convergence for
+  document text
 
 ## Interpretation Rules
 
@@ -28,6 +30,9 @@ replay constraints for the post-v1 offline queueing alpha.
 - provisional offline local state must not be described or treated as accepted shared state before
   replay succeeds
 - offline queue replay must happen after normal catch-up, not before
+- document title metadata must remain separate from CRDT text semantics
+- presence, cursor, and selection traffic must remain ephemeral and must not be replayed as
+  document truth
 
 ## Validation Rule
 

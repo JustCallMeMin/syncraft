@@ -18,6 +18,11 @@ Use this folder for execution sequencing and proof-oriented documents.
   Accepted scope boundary for the minimal in-app observability debug panel.
 - [`observability-debug-event-model.md`](./observability-debug-event-model.md)
   Client-side event taxonomy, redaction rules, and retention cap for the debug panel timeline.
+- [`docs-core-web-ux-run-plan.md`](./docs-core-web-ux-run-plan.md)
+  Approved post-v1 run plan for the docs-core browser collaboration tranche.
+- [`docs-core-web-ux-adr.md`](./docs-core-web-ux-adr.md)
+  Accepted scope boundary for document title metadata, save-state chrome, and ephemeral
+  presence in the web UX upgrade.
 - [`offline-queueing-alpha-adr.md`](./offline-queueing-alpha-adr.md)
   Accepted decision for the post-v1 offline queueing alpha scope and durability boundary.
 - [`use-cases/`](./use-cases/)

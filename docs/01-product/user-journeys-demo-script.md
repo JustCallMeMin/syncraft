@@ -250,3 +250,16 @@ It is intended to make reconnect, replay, blocked-queue, and corruption states l
 operator-facing demos without replacing terminal logs as the canonical technical audit source.
 That direction is accepted in
 [`../03-planning-and-validation/observability-ux-debug-panel-adr.md`](../03-planning-and-validation/observability-ux-debug-panel-adr.md).
+
+The next approved tranche after observability UX is a docs-core web UX upgrade.
+That tranche turns the browser shell into a more practical collaborative writing surface with:
+
+- document title chrome
+- visible save and sync state
+- collaborator presence strip
+- remote caret and basic selection visualization
+
+It remains plain text only and does not introduce comments, suggestion mode, or rich-text
+formatting.
+That direction is accepted in
+[`../03-planning-and-validation/docs-core-web-ux-adr.md`](../03-planning-and-validation/docs-core-web-ux-adr.md).
