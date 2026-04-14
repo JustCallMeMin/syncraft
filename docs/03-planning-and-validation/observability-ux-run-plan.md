@@ -20,6 +20,9 @@ implementation-ready task graph without expanding Syncraft into a dashboard prod
 - broader observability dashboards remain out of scope
 - no new protocol messages or metrics backend are part of this tranche by default
 
+The accepted ADR for this boundary is
+[`observability-ux-debug-panel-adr.md`](./observability-ux-debug-panel-adr.md).
+
 ## Planned Product Shape
 
 Add a collapsible debug panel to the current browser demo shell.
@@ -45,16 +48,26 @@ The panel must not expose queued text payloads or raw document contents as diagn
 - Keep the browser shell itself as the only observability surface for this tranche.
 - Treat the panel as a debug aid, not a product-scope expansion.
 
+The initial shell implementation is now in place in the browser demo:
+
+- a collapsible debug panel container exists beside the editor shell
+- the panel is hidden by default and controlled by an explicit toggle button
+- `Session`, `Queue`, and `Replay` sections now surface current browser-shell diagnostics
+- `Recent Events` now renders a bounded newest-first browser event timeline with payload-safe summaries
+
+The accepted event taxonomy, redaction rules, and retention cap are defined in
+[`observability-debug-event-model.md`](./observability-debug-event-model.md).
+
 ## Task Graph
 
 1. `@agent-founding-engine`: Approve observability UX scope and debug-panel ADR
 2. `@agent-product-docs`: Update PRD, MVP scope, and demo script for the observability UX decision
 3. `@agent-client`: Define browser debug event model and bounded event buffer policy
-4. `@agent-client`: Implement collapsible in-app debug panel shell
-5. `@agent-client`: Surface session, queue, and replay diagnostics in the debug panel
-6. `@agent-client`: Add recent event timeline without payload leakage
-7. `@agent-qa`: Add regression coverage for observability panel state and blocked-queue diagnostics
-8. `@agent-reviewer-security`: Review observability UX boundaries and event redaction policy
+4. `@agent-client`: Implement collapsible in-app debug panel shell - completed
+5. `@agent-client`: Surface session, queue, and replay diagnostics in the debug panel - completed
+6. `@agent-client`: Add recent event timeline without payload leakage - completed
+7. `@agent-qa`: Add regression coverage for observability panel state and blocked-queue diagnostics - completed
+8. `@agent-reviewer-security`: Review observability UX boundaries and event redaction policy - completed
 
 ## Acceptance Criteria
 
@@ -64,9 +77,21 @@ The panel must not expose queued text payloads or raw document contents as diagn
 - the panel stays consistent across reconnect, refresh, replay, and blocked-queue states
 - no backend protocol expansion is required for the first observability UX tranche
 
+## Reviewer-Security Sign-Off
+
+Reviewer-security sign-off is accepted for this tranche with these explicit boundaries:
+
+- logs remain the primary technical audit trail
+- the in-app panel remains a least-privilege operator aid rather than a dashboard surface
+- the event timeline stores only ids, counts, level labels, state labels, and short messages
+- the event timeline does not persist across reload or restart by design in this tranche
+- blocked-queue diagnostics remain read-only and do not reveal raw document contents or CRDT payload bodies
+
 ## Related Docs
 
 - [`feature-breakdown-milestone-backlog.md`](./feature-breakdown-milestone-backlog.md)
+- [`observability-ux-debug-panel-adr.md`](./observability-ux-debug-panel-adr.md)
+- [`observability-debug-event-model.md`](./observability-debug-event-model.md)
 - [`post-v1-offline-queueing-run-plan.md`](./post-v1-offline-queueing-run-plan.md)
 - [`../01-product/prd-business-spec.md`](../01-product/prd-business-spec.md)
 - [`../01-product/mvp-scope-release-criteria.md`](../01-product/mvp-scope-release-criteria.md)

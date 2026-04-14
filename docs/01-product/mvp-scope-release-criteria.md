@@ -200,3 +200,5 @@ The next planning tranche after that alpha is observability UX for the shipped b
 shell. Its currently accepted direction is a minimal in-app debug panel for demo and operator
 diagnosis while logs remain the primary technical audit source. Broader dashboards remain out
 of scope.
+The accepted boundary is recorded in
+[`../03-planning-and-validation/observability-ux-debug-panel-adr.md`](../03-planning-and-validation/observability-ux-debug-panel-adr.md).

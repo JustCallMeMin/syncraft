@@ -206,6 +206,9 @@ Its accepted direction is:
 - add a minimal in-app debug panel for operator-facing diagnosis
 - keep broader dashboards out of scope
 
+This boundary is accepted in
+[`../03-planning-and-validation/observability-ux-debug-panel-adr.md`](../03-planning-and-validation/observability-ux-debug-panel-adr.md).
+
 ## Open Questions
 
 - Which initial demo scenario best communicates value to non-technical reviewers?

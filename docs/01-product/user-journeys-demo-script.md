@@ -248,3 +248,5 @@ editing that is correct, deterministic to recover, and resilient to operational 
 The next approved planning tranche for the browser demo shell is a minimal in-app debug panel.
 It is intended to make reconnect, replay, blocked-queue, and corruption states legible during
 operator-facing demos without replacing terminal logs as the canonical technical audit source.
+That direction is accepted in
+[`../03-planning-and-validation/observability-ux-debug-panel-adr.md`](../03-planning-and-validation/observability-ux-debug-panel-adr.md).

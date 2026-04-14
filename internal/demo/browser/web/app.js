@@ -15,11 +15,29 @@ import {
 import { computeTextDiff } from "/browser_text_diff.js";
 import { resolveEditorInputMode } from "/browser_input_policy.js";
 import { createBrowserStatusState } from "/browser_status_state.js";
+import { createDebugPanelState } from "/browser_debug_panel_state.js";
+import { deriveDebugPanelDiagnostics } from "/browser_debug_panel_diagnostics.js";
+import { createDebugEventBuffer } from "/browser_debug_event_buffer.js";
 
 const form = document.getElementById("connect-form");
 const actorInput = document.getElementById("actor-id");
 const documentInput = document.getElementById("document-id");
 const reconnectButton = document.getElementById("reconnect-button");
+const debugPanelToggleButton = document.getElementById("debug-panel-toggle");
+const debugPanel = document.getElementById("debug-panel");
+const debugActorInstanceNode = document.getElementById("debug-actor-instance");
+const debugDocumentIDNode = document.getElementById("debug-document-id");
+const debugConnectionStateNode = document.getElementById("debug-connection-state");
+const debugLastErrorNode = document.getElementById("debug-last-error");
+const debugQueueStateNode = document.getElementById("debug-queue-state");
+const debugPendingQueueCountNode = document.getElementById("debug-pending-queue-count");
+const debugQueueSummaryNode = document.getElementById("debug-queue-summary");
+const debugLastSnapshotIDNode = document.getElementById("debug-last-snapshot-id");
+const debugLastOperationIDNode = document.getElementById("debug-last-operation-id");
+const debugReplayStateNode = document.getElementById("debug-replay-state");
+const debugReplayInFlightNode = document.getElementById("debug-replay-in-flight");
+const debugBlockedReasonNode = document.getElementById("debug-blocked-reason");
+const debugEventsListNode = document.getElementById("debug-events-list");
 const editor = document.getElementById("editor");
 const statusNode = document.getElementById("status");
 const queueSummaryNode = document.getElementById("queue-summary");
@@ -44,6 +62,8 @@ let liveSubmitInFlight = false;
 let pendingEditorText = null;
 let sessionReady = false;
 const browserStatusState = createBrowserStatusState();
+const debugPanelState = createDebugPanelState(false);
+const debugEventBuffer = createDebugEventBuffer(50);
 
 const restoredSessionIntent = loadSessionIntent();
 if (restoredSessionIntent) {
@@ -54,8 +74,8 @@ if (restoredSessionIntent) {
 }
 
 initializeQueueStore();
-if (restoredSessionIntent) {
-  connect(restoredSessionIntent, {
+  if (restoredSessionIntent) {
+    connect(restoredSessionIntent, {
     preserveSessionState: false,
   }).catch((error) => {
     setStatus("error", error.message);
@@ -71,6 +91,9 @@ form.addEventListener("submit", async (event) => {
     retry: true,
   };
   saveSessionIntent(intent);
+  emitDebugEvent("connect_requested", "info", "Connect requested from the browser shell.", {
+    retry: intent.retry,
+  });
   await connect(intent, {
     preserveSessionState: false,
   });
@@ -81,9 +104,16 @@ reconnectButton.addEventListener("click", async () => {
     setStatus("error", "connect once before trying to reconnect");
     return;
   }
+  emitDebugEvent("reconnect_requested", "warning", "Manual reconnect requested from the browser shell.", {
+    retry: sessionIntent.retry,
+  });
   await connect(sessionIntent, {
     preserveSessionState: false,
   });
+});
+
+debugPanelToggleButton.addEventListener("click", () => {
+  renderDebugPanel(debugPanelState.toggle());
 });
 
 editor.addEventListener("input", async () => {
@@ -172,6 +202,9 @@ async function connect(intent, options = {}) {
     if (!isCurrentGeneration(connectionGeneration, eventGeneration)) {
       return;
     }
+    emitDebugEvent("socket_opened", "info", "Socket opened for the active actor instance.", {
+      preserve_session_state: preserveSessionState,
+    });
     socket.send(JSON.stringify({
       type: "init",
       actor_id: intent.actorID,
@@ -194,6 +227,9 @@ async function connect(intent, options = {}) {
     if (message.document_id && message.document_id !== sessionIntent?.documentID) {
       return;
     }
+    emitDebugEvent("state_ready", "info", "State ready received for the active session.", {
+      next_actor_counter: message.next_actor_counter || queueMetadata?.next_actor_counter || 1,
+    });
     sessionReady = true;
     resolveStateWaiters(message);
     applyingRemoteState = true;
@@ -235,10 +271,16 @@ async function connect(intent, options = {}) {
     if (!isCurrentGeneration(connectionGeneration, eventGeneration)) {
       return;
     }
+    emitDebugEvent("disconnect_detected", "warning", "Socket closed for the active session.", {
+      retry: intent.retry,
+    });
     setStatus("disconnected", "");
     updateEditorDisabled("disconnected");
     reconnectButton.disabled = false;
     if (intent.retry) {
+      emitDebugEvent("reconnect_scheduled", "warning", "Reconnect scheduled after disconnect.", {
+        retry_delay_ms: 750,
+      });
       reconnectTimer = window.setTimeout(() => {
         if (!isCurrentGeneration(connectionGeneration, eventGeneration)) {
           return;
@@ -280,6 +322,7 @@ async function initializeQueueStore() {
   } catch (error) {
     queueStore = null;
     queueBlockedReason = `offline queue store init failed: ${error.message}`;
+    emitDebugEvent("queue_store_init_failed", "error", "Offline queue store initialization failed.", {});
     setStatus("error", queueBlockedReason);
     updateEditorDisabled("error");
   }
@@ -301,6 +344,7 @@ async function loadPendingQueue(intent) {
     return true;
   } catch (error) {
     queueBlockedReason = `offline queue load failed: ${error.message}`;
+    emitDebugEvent("queue_load_failed", "error", "Pending queue records could not be loaded.", {});
     setStatus("error", queueBlockedReason);
     updateEditorDisabled("error");
     reconnectButton.disabled = false;
@@ -323,6 +367,7 @@ async function loadQueueMetadata(intent) {
     return true;
   } catch (error) {
     queueBlockedReason = `offline metadata load failed: ${error.message}`;
+    emitDebugEvent("queue_metadata_load_failed", "error", "Offline queue metadata could not be loaded.", {});
     setStatus("error", queueBlockedReason);
     updateEditorDisabled("error");
     reconnectButton.disabled = false;
@@ -510,6 +555,10 @@ async function queueOfflineDiff(diff, nextText) {
     lastText = nextText;
     reconnectingWithQueue = false;
     queueBlockedReason = "";
+    emitDebugEvent("offline_queue_appended", "warning", "Offline operations were appended to the local queue.", {
+      appended_count: queuedOperations.length,
+      pending_queue_count: pendingQueueRecords.length,
+    });
     setStatus("disconnected", "");
     updateEditorDisabled("disconnected");
   } catch (error) {
@@ -528,6 +577,9 @@ async function replayPendingQueue() {
   }
 
   replayInFlight = true;
+  emitDebugEvent("replay_started", "warning", "Queued operations started replay after reconnect.", {
+    pending_queue_count: pendingQueueRecords.length,
+  });
   updateEditorDisabled("replaying_queue");
   reconnectButton.disabled = true;
   setStatus("live", "");
@@ -549,11 +601,17 @@ async function replayPendingQueue() {
         pending_queue_count: pendingQueueRecords.length,
       });
       window.syncraftQueueMetadata = queueMetadata;
+      emitDebugEvent("replay_progress", "info", "Queued operation replay progressed.", {
+        pending_queue_count: pendingQueueRecords.length,
+      });
     }
 
     await queueStore.clearReplayed(sessionIntent.documentID, sessionIntent.actorID);
     reconnectingWithQueue = false;
     queueBlockedReason = "";
+    emitDebugEvent("replay_completed", "info", "Queued operation replay completed.", {
+      pending_queue_count: pendingQueueRecords.length,
+    });
     setStatus("live", "");
     updateEditorDisabled("live");
   } catch (error) {
@@ -561,6 +619,9 @@ async function replayPendingQueue() {
       const record = pendingQueueRecords[0];
       await queueStore.markBlocked(record.document_id, record.actor_id, record.operation_id, error.message);
     }
+    emitDebugEvent("replay_failed", "error", "Queued operation replay failed.", {
+      pending_queue_count: pendingQueueRecords.length,
+    });
     setQueueBlocked(error.message);
   } finally {
     replayInFlight = false;
@@ -622,6 +683,9 @@ function revertEditorToLastText() {
 function setQueueBlocked(reason) {
   queueBlockedReason = reason;
   reconnectingWithQueue = false;
+  emitDebugEvent("queue_blocked", "error", "Queue entered a blocked state and editing is read-only.", {
+    pending_queue_count: pendingQueueRecords.length,
+  });
   setStatus("error", reason);
   updateEditorDisabled("error");
   reconnectButton.disabled = false;
@@ -640,15 +704,17 @@ function resetSessionState(intent) {
   lastText = "";
   window.syncraftPendingQueueRecords = pendingQueueRecords;
   window.syncraftQueueMetadata = queueMetadata;
-  browserStatusState.reset();
+  const nextStatus = browserStatusState.reset();
   editor.value = "";
-  statusNode.textContent = "disconnected";
+  statusNode.textContent = nextStatus.connectionState;
+  statusNode.className = `status-${nextStatus.connectionState}`;
   queueSummaryNode.textContent = "no queued local operations";
-  errorNode.textContent = "none";
+  errorNode.textContent = nextStatus.errorText;
   if (intent) {
     actorInput.value = intent.actorID;
     documentInput.value = intent.documentID;
   }
+  renderDebugDiagnostics();
 }
 
 function updateEditorDisabled(connectionState) {
@@ -674,6 +740,7 @@ function setStatus(state, errorText) {
   statusNode.className = `status-${surface.state}`;
   queueSummaryNode.textContent = surface.queueSummary;
   errorNode.textContent = nextStatus.errorText;
+  renderDebugDiagnostics();
 }
 
 window.syncraftBrowserTestAPI = {
@@ -682,5 +749,134 @@ window.syncraftBrowserTestAPI = {
       socket.close();
     }
   },
+  isDebugPanelExpanded() {
+    return debugPanelState.isExpanded();
+  },
+  getDebugPanelDiagnostics() {
+    return deriveDebugPanelDiagnostics({
+      sessionIntent,
+      browserStatusState,
+      queueMetadata,
+      pendingQueueRecords,
+      queueBlockedReason,
+      reconnectingWithQueue,
+      replayInFlight,
+      debugEvents: debugEventBuffer.list(),
+    });
+  },
 };
+
+/**
+ * renderDebugPanel syncs the current debug-panel expansion state into the DOM shell.
+ */
+function renderDebugPanel(expanded) {
+  debugPanel.hidden = !expanded;
+  debugPanelToggleButton.setAttribute("aria-expanded", String(expanded));
+  debugPanelToggleButton.textContent = expanded ? "Hide Debug Panel" : "Show Debug Panel";
+}
+
+/**
+ * renderDebugDiagnostics projects the current browser-shell state into the operator-facing panel.
+ */
+function renderDebugDiagnostics() {
+  const diagnostics = deriveDebugPanelDiagnostics({
+    sessionIntent,
+    browserStatusState,
+    queueMetadata,
+    pendingQueueRecords,
+    queueBlockedReason,
+    reconnectingWithQueue,
+    replayInFlight,
+    debugEvents: debugEventBuffer.list(),
+  });
+  debugActorInstanceNode.textContent = diagnostics.session.actorInstanceID;
+  debugDocumentIDNode.textContent = diagnostics.session.documentID;
+  debugConnectionStateNode.textContent = diagnostics.session.connectionState;
+  debugLastErrorNode.textContent = diagnostics.session.lastError;
+  debugQueueStateNode.textContent = diagnostics.queue.queueState;
+  debugPendingQueueCountNode.textContent = diagnostics.queue.pendingQueueCount;
+  debugQueueSummaryNode.textContent = diagnostics.queue.queueSummary;
+  debugLastSnapshotIDNode.textContent = diagnostics.queue.lastSnapshotID;
+  debugLastOperationIDNode.textContent = diagnostics.queue.lastOperationID;
+  debugReplayStateNode.textContent = diagnostics.replay.replayState;
+  debugReplayInFlightNode.textContent = diagnostics.replay.replayInFlight;
+  debugBlockedReasonNode.textContent = diagnostics.replay.blockedReason;
+  renderDebugEvents(diagnostics.recentEvents);
+}
+
+/**
+ * emitDebugEvent records one payload-safe browser event and refreshes the diagnostics panel.
+ */
+function emitDebugEvent(eventType, level, message, details = {}) {
+  const diagnostics = deriveDebugPanelDiagnostics({
+    sessionIntent,
+    browserStatusState,
+    queueMetadata,
+    pendingQueueRecords,
+    queueBlockedReason,
+    reconnectingWithQueue,
+    replayInFlight,
+  });
+  debugEventBuffer.append({
+    event_type: eventType,
+    level,
+    document_id: diagnostics.session.documentID,
+    actor_id: diagnostics.session.actorInstanceID,
+    connection_state: diagnostics.session.connectionState,
+    queue_state: diagnostics.queue.queueState,
+    pending_queue_count: Number.parseInt(diagnostics.queue.pendingQueueCount, 10) || 0,
+    snapshot_id: diagnostics.queue.lastSnapshotID,
+    last_operation_id: diagnostics.queue.lastOperationID,
+    message,
+    details,
+  });
+  renderDebugDiagnostics();
+}
+
+/**
+ * renderDebugEvents paints the bounded event timeline into the debug panel.
+ */
+function renderDebugEvents(events) {
+  if (!Array.isArray(events) || events.length === 0) {
+    debugEventsListNode.innerHTML = '<li class="debug-event-empty">No recent events yet.</li>';
+    return;
+  }
+  debugEventsListNode.innerHTML = events.map((event) => `
+      <li class="debug-event debug-event-${escapeHTML(event.level)}">
+        <div class="debug-event-head">
+          <span class="debug-event-type">${escapeHTML(event.eventType)}</span>
+          <span class="debug-event-time">${escapeHTML(formatOccurredAt(event.occurredAt))}</span>
+        </div>
+        <p class="debug-event-message">${escapeHTML(event.message)}</p>
+        <p class="debug-event-meta">Actor ${escapeHTML(event.actorID || sessionIntent?.actorID || "none")} · Document ${escapeHTML(event.documentID || sessionIntent?.documentID || "none")}</p>
+      </li>
+    `).join("");
+}
+
+function formatOccurredAt(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return "unknown time";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+renderDebugDiagnostics();
+renderDebugPanel(debugPanelState.isExpanded());
 

@@ -14,6 +14,10 @@ Use this folder for execution sequencing and proof-oriented documents.
   Approved next-run sequence for the post-v1 offline queueing alpha.
 - [`observability-ux-run-plan.md`](./observability-ux-run-plan.md)
   Approved planning tranche for the next post-v1 observability UX run.
+- [`observability-ux-debug-panel-adr.md`](./observability-ux-debug-panel-adr.md)
+  Accepted scope boundary for the minimal in-app observability debug panel.
+- [`observability-debug-event-model.md`](./observability-debug-event-model.md)
+  Client-side event taxonomy, redaction rules, and retention cap for the debug panel timeline.
 - [`offline-queueing-alpha-adr.md`](./offline-queueing-alpha-adr.md)
   Accepted decision for the post-v1 offline queueing alpha scope and durability boundary.
 - [`use-cases/`](./use-cases/)

@@ -29,13 +29,16 @@ test("corrupted queued operation record surfaces queue_blocked on reconnect", as
 
   const page = await context.newPage();
   await connectEditor(page, origin, "actor-corrupt-record", "doc-corrupt-record");
+  await openDebugPanel(page);
   await transitionToOfflineQueueState(context, page, "ab");
   await corruptPendingQueuedOperation(page, "doc-corrupt-record", "actor-corrupt-record");
 
   await context.setOffline(false);
   await page.reload();
   await waitForBlockedQueue(page, /stored queued operation 1 is corrupted/i);
+  await openDebugPanel(page);
   assert.equal(await page.locator("#editor").isDisabled(), true);
+  await waitForBlockedQueueDiagnostics(page, "doc-corrupt-record", "actor-corrupt-record");
 });
 
 test("corrupted queue metadata surfaces queue_blocked before reconnect", async (t) => {
@@ -56,11 +59,18 @@ test("corrupted queue metadata surfaces queue_blocked before reconnect", async (
 
   const page = await context.newPage();
   await connectEditor(page, origin, "actor-corrupt-meta", "doc-corrupt-meta");
+  await openDebugPanel(page);
   await corruptQueueMetadata(page, "doc-corrupt-meta", "actor-corrupt-meta");
   await page.reload();
   await waitForBlockedQueue(page, /stored queue metadata is corrupted/i);
+  await openDebugPanel(page);
   assert.equal(await page.locator("#editor").isDisabled(), true);
+  await waitForBlockedQueueDiagnostics(page, "doc-corrupt-meta", "actor-corrupt-meta");
 });
+
+async function openDebugPanel(page) {
+  await page.getByRole("button", { name: "Show Debug Panel", exact: true }).click();
+}
 
 async function connectEditor(page, origin, actorID, documentID) {
   await page.goto(origin);
@@ -150,6 +160,23 @@ async function waitForBlockedQueue(page, errorPattern) {
     const queue = document.getElementById("queue-summary")?.textContent?.trim() ?? "";
     return status === "queue_blocked" && new RegExp(patternSource, "i").test(queue);
   }, errorPattern.source, { timeout: 10000 });
+}
+
+async function waitForBlockedQueueDiagnostics(page, documentID, actorID) {
+  await page.waitForFunction(({ expectedDocumentID, expectedActorID }) => {
+    const queueState = document.getElementById("debug-queue-state")?.textContent?.trim() ?? "";
+    const blockedReason = document.getElementById("debug-blocked-reason")?.textContent?.trim() ?? "";
+    const actor = document.getElementById("debug-actor-instance")?.textContent?.trim() ?? "";
+    const documentID = document.getElementById("debug-document-id")?.textContent?.trim() ?? "";
+    const eventTypes = Array.from(document.querySelectorAll(".debug-event-type")).map((node) => node.textContent?.trim());
+    const timelineText = document.getElementById("debug-events-list")?.textContent ?? "";
+    return queueState === "queue_blocked"
+      && blockedReason !== "none"
+      && actor === expectedActorID
+      && documentID === expectedDocumentID
+      && (eventTypes.includes("queue_load_failed") || eventTypes.includes("queue_metadata_load_failed"))
+      && !timelineText.includes("ab");
+  }, { expectedDocumentID: documentID, expectedActorID: actorID }, { timeout: 10000 });
 }
 
 async function startDemoServer(port, dataDir) {

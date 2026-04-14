@@ -29,11 +29,14 @@ test("same-profile page refresh replays queued offline edits after restore", asy
 
   const page = await context.newPage();
   await connectEditor(page, origin, "actor-queue-refresh", "doc-queue-refresh");
+  await openDebugPanel(page);
   await transitionToOfflineQueueState(context, page, "ab");
 
   await context.setOffline(false);
   await page.reload();
   await waitForRestoredReplay(page, "actor-queue-refresh", "doc-queue-refresh", "ab");
+  await openDebugPanel(page);
+  await waitForObservabilityRestore(page, "actor-queue-refresh", "doc-queue-refresh");
 });
 
 test("same-profile browser restart replays queued offline edits after restore", async (t) => {
@@ -54,6 +57,7 @@ test("same-profile browser restart replays queued offline edits after restore", 
 
   let page = await context.newPage();
   await connectEditor(page, origin, "actor-queue-restart", "doc-queue-restart");
+  await openDebugPanel(page);
   await transitionToOfflineQueueState(context, page, "ab");
   await context.close();
 
@@ -64,6 +68,8 @@ test("same-profile browser restart replays queued offline edits after restore", 
   await page.getByLabel("Document").fill("doc-queue-restart");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await waitForLiveText(page, "ab");
+  await openDebugPanel(page);
+  await waitForObservabilityRestore(page, "actor-queue-restart", "doc-queue-restart");
 });
 
 test("offline replay converges to the same visible text as the online flow", async (t) => {
@@ -123,6 +129,12 @@ async function connectEditor(page, origin, actorID, documentID) {
   }, null, { timeout: 10000 });
 }
 
+async function openDebugPanel(page) {
+  if (await page.getByRole("button", { name: "Show Debug Panel", exact: true }).isVisible()) {
+    await page.getByRole("button", { name: "Show Debug Panel", exact: true }).click();
+  }
+}
+
 async function transitionToOfflineQueueState(context, page, queuedText) {
   await context.setOffline(true);
   await page.evaluate(() => {
@@ -175,6 +187,23 @@ async function waitForRestoredReplay(page, actorID, documentID, expectedText) {
       queue === "no queued local operations" &&
       error === "none";
   }, { actorID, documentID, expectedText }, { timeout: 10000 });
+}
+
+async function waitForObservabilityRestore(page, actorID, documentID) {
+  await page.waitForFunction(({ expectedActorID, expectedDocumentID }) => {
+    const actor = document.getElementById("debug-actor-instance")?.textContent?.trim() ?? "";
+    const documentID = document.getElementById("debug-document-id")?.textContent?.trim() ?? "";
+    const connection = document.getElementById("debug-connection-state")?.textContent?.trim() ?? "";
+    const queueState = document.getElementById("debug-queue-state")?.textContent?.trim() ?? "";
+    const pendingCount = document.getElementById("debug-pending-queue-count")?.textContent?.trim() ?? "";
+    const eventTypes = Array.from(document.querySelectorAll(".debug-event-type")).map((node) => node.textContent?.trim());
+    return actor === expectedActorID
+      && documentID === expectedDocumentID
+      && connection === "live"
+      && queueState === "live"
+      && pendingCount === "0"
+      && eventTypes.includes("state_ready");
+  }, { expectedActorID: actorID, expectedDocumentID: documentID }, { timeout: 10000 });
 }
 
 async function startDemoServer(port, dataDir) {

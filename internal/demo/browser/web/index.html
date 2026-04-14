@@ -38,11 +38,92 @@
             <dd id="error">none</dd>
           </div>
         </dl>
+        <button id="debug-panel-toggle" class="debug-toggle" type="button" aria-expanded="false" aria-controls="debug-panel">
+          Show Debug Panel
+        </button>
       </section>
       <section class="panel editor-panel">
         <label class="editor-label" for="editor">Shared Plain Text</label>
         <textarea id="editor" spellcheck="false" placeholder="Connect two browser tabs and start typing." disabled></textarea>
       </section>
+      <aside id="debug-panel" class="panel debug-panel" hidden>
+        <div class="debug-panel-header">
+          <h2>Debug Panel</h2>
+          <p>Operator-facing diagnostics for reconnect, replay, and blocked queue flows.</p>
+        </div>
+        <div class="debug-panel-grid">
+          <section class="debug-card" aria-labelledby="debug-session-heading">
+            <h3 id="debug-session-heading">Session</h3>
+            <dl class="debug-list">
+              <div>
+                <dt>Actor Instance</dt>
+                <dd id="debug-actor-instance">none</dd>
+              </div>
+              <div>
+                <dt>Document</dt>
+                <dd id="debug-document-id">none</dd>
+              </div>
+              <div>
+                <dt>Connection</dt>
+                <dd id="debug-connection-state">disconnected</dd>
+              </div>
+              <div>
+                <dt>Last Error</dt>
+                <dd id="debug-last-error">none</dd>
+              </div>
+            </dl>
+          </section>
+          <section class="debug-card" aria-labelledby="debug-queue-heading">
+            <h3 id="debug-queue-heading">Queue</h3>
+            <dl class="debug-list">
+              <div>
+                <dt>Queue State</dt>
+                <dd id="debug-queue-state">disconnected</dd>
+              </div>
+              <div>
+                <dt>Pending Count</dt>
+                <dd id="debug-pending-queue-count">0</dd>
+              </div>
+              <div>
+                <dt>Summary</dt>
+                <dd id="debug-queue-summary">no queued local operations</dd>
+              </div>
+              <div>
+                <dt>Last Snapshot</dt>
+                <dd id="debug-last-snapshot-id">none</dd>
+              </div>
+              <div>
+                <dt>Last Operation</dt>
+                <dd id="debug-last-operation-id">none</dd>
+              </div>
+            </dl>
+          </section>
+          <section class="debug-card" aria-labelledby="debug-replay-heading">
+            <h3 id="debug-replay-heading">Replay</h3>
+            <dl class="debug-list">
+              <div>
+                <dt>Replay State</dt>
+                <dd id="debug-replay-state">idle</dd>
+              </div>
+              <div>
+                <dt>In Flight</dt>
+                <dd id="debug-replay-in-flight">no</dd>
+              </div>
+              <div>
+                <dt>Blocked Reason</dt>
+                <dd id="debug-blocked-reason">none</dd>
+              </div>
+            </dl>
+          </section>
+          <section class="debug-card debug-card-wide" aria-labelledby="debug-events-heading">
+            <h3 id="debug-events-heading">Recent Events</h3>
+            <p class="debug-events-subtitle">Newest-first browser-shell transitions with payload-safe summaries.</p>
+            <ul id="debug-events-list" class="debug-events-list" aria-live="polite">
+              <li class="debug-event-empty">No recent events yet.</li>
+            </ul>
+          </section>
+        </div>
+      </aside>
     </main>
     <script type="module" src="/app.js"></script>
   </body>
